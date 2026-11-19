@@ -1,0 +1,26 @@
+# SoundHall Example Score: Japanese Ensemble (和楽器アンサンブル)
+# Demonstrating Koto (107), Shakuhachi (77), Shamisen (106), Taiko (116) & Strings (49)
+tempo 92
+
+track Koto ch=0 program=107 vol=102 pan=44 rev=42
+o4 l8 q8 v92
+d8 e8 f8 a8 >d4< a8 f8 | e8 f8 a8 >d8 e4 d4< |
+d8 f8 a8 >d8 f4 e8 d8 | a4 f8 e8 d2< |
+[d a >d<]1
+
+track Shakuhachi ch=1 program=77 vol=98 pan=68 rev=50
+o4 l4 q8 v90
+r2 d4 e8 f8 | a2. f8 e8 | d2 f8 a8 >d4< | a4 f8 e8 d2 | d1
+
+track Shamisen ch=2 program=106 vol=94 pan=82 rev=30
+o3 l8 q7 v94
+d8 r8 d8 a8 >d8< r8 a8 d8 | f8 r8 f8 a8 >d8< r8 a8 f8 |
+d8 d8 a8 d8 f8 f8 a8 f8 | d4 a4 d2 | d1
+
+track TaikoDrum ch=3 program=116 vol=106 pan=64 rev=42
+o2 l4 q7 v105
+d4 r4 d8 d8 r4 | d4 r8 d8 d4 r4 | d4 d8 d8 r4 d4 | d4 d8 d8 d4 d4 | d1
+
+track EnsembleStrings ch=4 program=49 vol=74 pan=64 rev=54
+o3 l1 q8 v78
+d1 | f1 | g1 | a1 | d1

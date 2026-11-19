@@ -1,0 +1,13 @@
+[package]
+name = "sound-hall-wasm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Zero-dependency WebAssembly C-ABI bindings and Web Audio Worklet wrapper for SoundHall"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+sound-hall-core = { path = "../sound-hall-core" }

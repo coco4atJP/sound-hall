@@ -38,10 +38,22 @@ sound-hall/
 ├── crates/
 │   ├── sound-hall-core/   # コアDSP・8合成エンジン・GM 128音色+47ドラム・SMF/SHS・WAV書き出し
 │   ├── sound-hall-wasm/   # wasm32-unknown-unknown C-ABI バインディング & Web Audio AudioWorklet ラッパー
-│   └── sound-hall-cli/    # CLIツール（楽器一覧・試聴・MIDI/SHS→WAV変換・ベンチマーク）
+│   └── sound-hall-cli/    # CLIツール（楽器一覧・試聴・MIDI/SHS→WAV変換・Webサーバー・ベンチマーク）
+├── web/                   # ビジュアルWebアプリ (SoundHall Studio: 128音色ブラウザー・波形/FFT表示・鍵盤・スコアエディタ)
 └── examples/
     ├── orchestral_showcase.shs
     └── japanese_ensemble.shs
+```
+
+---
+
+## ビジュアル Web スタジオ (`web/`)
+
+ブラウザ上で全128音色＋47ドラムの試奏、リアルタイム・オシロスコープ＆64バンド FFT スペクトル表示、16チャンネル MIDI マトリクス、`.shs` ライブスコア編集、`.mid` ドラッグ＆ドロップ再生、ブラウザ内 `.wav` エクスポートが行える Web アプリを同梱しています。
+
+```bash
+# 内蔵HTTPサーバーで Web スタジオを起動 (デフォルト: http://127.0.0.1:8080)
+./target/release/sound-hall serve --port 8080
 ```
 
 ---

@@ -1,7 +1,8 @@
 use std::env;
 use std::fs::{self, File, OpenOptions};
-use std::io::BufWriter;
-use std::path::{Path, PathBuf};
+use std::io::{BufRead, BufReader, BufWriter, Write};
+use std::net::TcpListener;
+use std::path::{Component, Path, PathBuf};
 use std::process::{self, Command};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
@@ -33,7 +34,9 @@ COMMANDS:
   play <input.mid|input.shs> [--sample-rate 44100] [--reverb 0.3]
       MIDI (.mid) またはスコア (.shs) ファイルを即座に再生
   benchmark [--voices 32] [--seconds 10] [--sample-rate 44100]
-      マルチボイス同時発音の処理速度・リアルタイム倍率を測定"#
+      マルチボイス同時発音の処理速度・リアルタイム倍率を測定
+  serve [--port 8080] [--dir web]
+      ビジュアルWebスタジオ (SoundHall Studio) のローカルHTTPサーバーを起動"#
     );
 }
 
@@ -766,6 +769,117 @@ fn cmd_benchmark(args: &[String]) {
     println!("  Total CPU load    : {cpu_pct:.2}% (~{per_voice_cpu_pct:.3}% per voice)");
 }
 
+fn content_type_for(path: &Path) -> &'static str {
+    match path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "html" | "htm" => "text/html; charset=utf-8",
+        "css" => "text/css; charset=utf-8",
+        "js" | "mjs" => "application/javascript; charset=utf-8",
+        "wasm" => "application/wasm",
+        "json" => "application/json; charset=utf-8",
+        "svg" => "image/svg+xml",
+        "wav" => "audio/wav",
+        "mid" | "midi" => "audio/midi",
+        "shs" | "txt" => "text/plain; charset=utf-8",
+        _ => "application/octet-stream",
+    }
+}
+
+fn cmd_serve(args: &[String]) {
+    let mut port: u16 = 8080;
+    let mut web_dir = PathBuf::from("web");
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--port" | "-p" => {
+                i += 1;
+                port = parse_u32_arg(args, i, "--port", 1, 65535) as u16;
+            }
+            "--dir" | "-d" => {
+                i += 1;
+                web_dir = PathBuf::from(require_arg(args, i, "--dir"));
+            }
+            other => die(&format!("unknown option for serve: {other}")),
+        }
+        i += 1;
+    }
+
+    if !web_dir.is_dir() {
+        die(&format!(
+            "web directory '{}' not found (run from repository root or pass --dir <path>)",
+            web_dir.display()
+        ));
+    }
+
+    let addr = format!("127.0.0.1:{port}");
+    let listener = TcpListener::bind(&addr)
+        .unwrap_or_else(|e| die(&format!("failed to bind http://{addr}: {e}")));
+
+    println!("SoundHall Visual Web Studio running at http://{addr}");
+    println!("Serving directory: {}", web_dir.display());
+    println!("Press Ctrl+C to stop.");
+
+    for stream in listener.incoming().flatten() {
+        let mut reader = BufReader::new(&stream);
+        let mut request_line = String::new();
+        if reader.read_line(&mut request_line).is_err() || request_line.is_empty() {
+            continue;
+        }
+        // Drain remaining request headers
+        loop {
+            let mut line = String::new();
+            if reader.read_line(&mut line).is_err() || line.trim().is_empty() {
+                break;
+            }
+        }
+
+        let parts: Vec<&str> = request_line.split_whitespace().collect();
+        let raw_path = parts.get(1).copied().unwrap_or("/");
+        let clean_path = raw_path.split('?').next().unwrap_or("/");
+        let rel_str = clean_path.trim_start_matches('/');
+        let rel_path = if rel_str.is_empty() {
+            Path::new("index.html")
+        } else {
+            Path::new(rel_str)
+        };
+
+        // Reject path traversal components
+        if rel_path.components().any(|c| {
+            matches!(
+                c,
+                Component::ParentDir | Component::RootDir | Component::Prefix(_)
+            )
+        }) {
+            let _ = (&stream)
+                .write_all(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 9\r\n\r\nForbidden");
+            continue;
+        }
+
+        let full_path = web_dir.join(rel_path);
+        match fs::read(&full_path) {
+            Ok(body) => {
+                let mime = content_type_for(&full_path);
+                let header = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: {mime}\r\nContent-Length: {}\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n",
+                    body.len()
+                );
+                let _ = (&stream).write_all(header.as_bytes());
+                let _ = (&stream).write_all(&body);
+            }
+            Err(_) => {
+                let _ = (&stream)
+                    .write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 9\r\nConnection: close\r\n\r\nNot Found");
+            }
+        }
+    }
+}
+
 fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
     if args.is_empty() {
@@ -783,6 +897,7 @@ fn main() {
         "render" => cmd_render(&args[1..]),
         "play" => cmd_play(&args[1..]),
         "benchmark" => cmd_benchmark(&args[1..]),
+        "serve" => cmd_serve(&args[1..]),
         other => {
             eprintln!("Unknown command: {other}\n");
             print_help();

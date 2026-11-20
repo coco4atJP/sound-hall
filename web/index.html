@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SoundHall Studio — 超軽量ゼロサンプル物理モデリング＆ハイブリッド音源エンジン</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand-group">
+      <div class="brand-logo" aria-hidden="true">
+        <svg viewBox="0 0 32 32" width="28" height="28">
+          <rect x="2" y="12" width="4" height="10" rx="2" fill="currentColor"/>
+          <rect x="8" y="6" width="4" height="20" rx="2" fill="currentColor"/>
+          <rect x="14" y="3" width="4" height="26" rx="2" fill="currentColor"/>
+          <rect x="20" y="8" width="4" height="16" rx="2" fill="currentColor"/>
+          <rect x="26" y="13" width="4" height="8" rx="2" fill="currentColor"/>
+        </svg>
+      </div>
+      <div>
+        <h1>SoundHall Studio</h1>
+        <p class="brand-subtitle">Zero-Sample Physical Modeling &amp; Hybrid General MIDI Synthesizer (Rust + WASM)</p>
+      </div>
+    </div>
+
+    <div class="telemetry-bar" role="status" aria-live="polite">
+      <div class="telemetry-pill">
+        <span class="pill-label">Engine</span>
+        <span id="status-engine" class="pill-value status-standby">Standby (Click to Play)</span>
+      </div>
+      <div class="telemetry-pill">
+        <span class="pill-label">Active Voices</span>
+        <span id="status-voices" class="pill-value">0 / 64</span>
+      </div>
+      <div class="telemetry-pill">
+        <span class="pill-label">Active Patch</span>
+        <span id="status-patch" class="pill-value">#000 Acoustic Grand Piano</span>
+      </div>
+      <div class="telemetry-pill">
+        <span class="pill-label">Web MIDI</span>
+        <span id="status-midi" class="pill-value">Ready</span>
+      </div>
+      <button type="button" id="btn-panic" class="toolbar-btn btn-danger">
+        All Notes Off
+      </button>
+    </div>
+  </header>
+
+  <main class="studio-layout">
+    <!-- Top Deck: Dual Visualizers + Acoustic & Master Controls -->
+    <section class="top-deck" aria-label="リアルタイム音響ビジュアライザーとマスターコントロール">
+      <div class="visualizer-grid">
+        <div class="visualizer-card">
+          <div class="card-header">
+            <h2>Oscilloscope (時間領域波形)</h2>
+            <span id="readout-peak" class="mono-badge">Peak: -∞ dB</span>
+          </div>
+          <canvas id="canvas-scope" width="560" height="160" aria-label="リアルタイム・オシロスコープ波形表示"></canvas>
+        </div>
+
+        <div class="visualizer-card">
+          <div class="card-header">
+            <h2>Spectrum Analyzer (FFT 周波数スペクトル)</h2>
+            <span id="readout-engine-kind" class="engine-tag">HammeredString (Unison Piano Waveguide)</span>
+          </div>
+          <canvas id="canvas-spectrum" width="560" height="160" aria-label="リアルタイム・周波数スペクトル表示"></canvas>
+        </div>
+      </div>
+
+      <div class="master-controls-card">
+        <div class="card-header">
+          <h2>Master &amp; Acoustic Controls</h2>
+          <div class="header-actions">
+            <button type="button" id="btn-audition-note" class="toolbar-btn btn-accent">単音試聴 (C4)</button>
+            <button type="button" id="btn-audition-chord" class="toolbar-btn">和音試聴 (Cmaj9)</button>
+            <button type="button" id="btn-sustain" class="toolbar-btn" aria-pressed="false">Sustain (CC64): OFF</button>
+          </div>
+        </div>
+
+        <div class="sliders-grid">
+          <div class="slider-field">
+            <div class="slider-label-row">
+              <label for="slider-volume">Master Gain</label>
+              <span id="val-volume" class="slider-readout">85%</span>
+            </div>
+            <input type="range" id="slider-volume" min="0" max="150" step="1" value="85" aria-valuetext="85%">
+          </div>
+
+          <div class="slider-field">
+            <div class="slider-label-row">
+              <label for="slider-reverb">Hall Reverb (CC91)</label>
+              <span id="val-reverb" class="slider-readout">30%</span>
+            </div>
+            <input type="range" id="slider-reverb" min="0" max="100" step="1" value="30" aria-valuetext="30%">
+          </div>
+
+          <div class="slider-field">
+            <div class="slider-label-row">
+              <label for="slider-chorus">Stereo Chorus (CC93)</label>
+              <span id="val-chorus" class="slider-readout">28%</span>
+            </div>
+            <input type="range" id="slider-chorus" min="0" max="100" step="1" value="28" aria-valuetext="28%">
+          </div>
+
+          <div class="slider-field">
+            <div class="slider-label-row">
+              <label for="slider-velocity">Key Velocity</label>
+              <span id="val-velocity" class="slider-readout">100</span>
+            </div>
+            <input type="range" id="slider-velocity" min="1" max="127" step="1" value="100" aria-valuetext="100">
+          </div>
+
+          <div class="slider-field">
+            <div class="slider-label-row">
+              <label for="slider-mod">Vibrato / Mod (CC1)</label>
+              <span id="val-mod" class="slider-readout">0%</span>
+            </div>
+            <input type="range" id="slider-mod" min="0" max="127" step="1" value="0" aria-valuetext="0%">
+          </div>
+
+          <div class="slider-field">
+            <div class="slider-label-row">
+              <label for="slider-bend">Pitch Bend (±2 st)</label>
+              <span id="val-bend" class="slider-readout">0.0 st</span>
+            </div>
+            <input type="range" id="slider-bend" min="-200" max="200" step="1" value="0" aria-valuetext="0.0 semitones">
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Middle Workspace: GM 128 Instrument Browser + Sequencer / Score / 16-Ch Mixer -->
+    <div class="middle-workspace">
+      <aside class="instrument-browser-panel" aria-label="General MIDI 128音色＆ドラムブラウザー">
+        <div class="card-header">
+          <h2>GM 128 Instruments &amp; 47 Drums</h2>
+          <label class="checkbox-inline" for="chk-auto-audition">
+            <input type="checkbox" id="chk-auto-audition" checked>
+            <span>選択時に試聴</span>
+          </label>
+        </div>
+
+        <search class="browser-search-box">
+          <div class="search-input-row">
+            <label for="instrument-search" class="sr-only">楽器を検索</label>
+            <input
+              type="search"
+              id="instrument-search"
+              placeholder="楽器名・番号・合成方式で検索 (例: 尺八, Koto, 77, Waveguide)..."
+            >
+            <span id="instrument-count" class="mono-badge">128 件</span>
+          </div>
+          <div id="family-chips" class="family-chips-bar" role="group" aria-label="楽器カテゴリー絞り込み"></div>
+        </search>
+
+        <div id="instrument-list" class="instrument-grid" role="listbox" aria-label="楽器プリセット一覧"></div>
+      </aside>
+
+      <section class="sequencer-studio-panel" aria-label="シーケンサー・16チャンネルミキサー・スコアスタジオ">
+        <!-- Sequencer Transport & Demo Selector -->
+        <div class="transport-card">
+          <div class="card-header">
+            <h2>Multi-Track Sequencer &amp; WAV Exporter</h2>
+            <div class="demo-buttons" role="group" aria-label="内蔵デモ曲">
+              <button type="button" class="toolbar-btn demo-btn active" data-demo="0">交響的夜明け (Orchestra)</button>
+              <button type="button" class="toolbar-btn demo-btn" data-demo="1">真夜中のカルテット (Jazz)</button>
+              <button type="button" class="toolbar-btn demo-btn" data-demo="2">桜と竹 (和楽器)</button>
+              <button type="button" class="toolbar-btn demo-btn" data-demo="3">ネオン・ホライズン (Synth)</button>
+              <button type="button" class="toolbar-btn demo-btn" data-demo="4">GM 楽器ツアー</button>
+            </div>
+          </div>
+
+          <div class="transport-controls-row">
+            <button type="button" id="btn-seq-play" class="toolbar-btn btn-accent">▶ 再生 (Play)</button>
+            <button type="button" id="btn-seq-stop" class="toolbar-btn">■ 停止 (Stop)</button>
+
+            <div class="timeline-Scrubber">
+              <div class="slider-label-row">
+                <label for="slider-timeline">Timeline</label>
+                <span id="val-timeline" class="slider-readout">0:00.0 / 0:18.5</span>
+              </div>
+              <input type="range" id="slider-timeline" min="0" max="1000" step="1" value="0" aria-valuetext="0.0 seconds">
+            </div>
+
+            <div class="file-actions">
+              <label for="file-import" class="toolbar-btn file-label">
+                📂 .mid / .shs 読込
+                <input type="file" id="file-import" accept=".mid,.midi,.shs,.txt" hidden>
+              </label>
+              <button type="button" id="btn-export-wav" class="toolbar-btn btn-export">
+                ⬇ WAV 書き出し
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 16-Channel Live Activity Matrix -->
+        <div class="mixer-card">
+          <div class="card-header">
+            <h2>16-Channel Live MIDI Matrix</h2>
+            <span class="mono-badge">CH 10 = GM Standard Drum Kit</span>
+          </div>
+          <div id="channel-matrix" class="channel-matrix-grid"></div>
+        </div>
+
+        <!-- Live .shs Score Editor -->
+        <div class="score-editor-card">
+          <div class="card-header">
+            <h2>SoundHall Score (<code>.shs</code>) Live Editor</h2>
+            <div class="header-actions">
+              <span id="score-status" class="score-status-ok">Ready</span>
+              <button type="button" id="btn-apply-score" class="toolbar-btn btn-accent">
+                スコア適用＆再生 (Apply &amp; Play)
+              </button>
+            </div>
+          </div>
+          <label for="score-textarea" class="sr-only">SoundHall スコアテキストエディタ</label>
+          <textarea
+            id="score-textarea"
+            rows="8"
+            spellcheck="false"
+            placeholder="tempo 120&#10;track Piano ch=0 program=0 vol=100&#10;o4 l4 c e g >c<"
+          ></textarea>
+        </div>
+      </section>
+    </div>
+
+    <!-- Bottom Performance Deck: Interactive Piano Keyboard & 47-Pad Drum Machine -->
+    <section class="performance-deck" aria-label="インタラクティブ鍵盤＆ドラムパッド">
+      <div class="card-header">
+        <div class="deck-tabs">
+          <h2>Interactive Performance Deck</h2>
+          <div class="tab-group" role="group" aria-label="演奏ビュー切替">
+            <button type="button" id="tab-piano" class="toolbar-btn active">🎹 Piano Keyboard (3 Octaves)</button>
+            <button type="button" id="tab-drums" class="toolbar-btn">🥁 47 GM Drum Pads (CH 10)</button>
+          </div>
+        </div>
+
+        <div id="piano-toolbar" class="header-actions">
+          <button type="button" id="btn-oct-down" class="toolbar-btn">◀ Oct - (Z)</button>
+          <span id="label-octave-range" class="mono-badge">Range: C3 (48) – B5 (83)</span>
+          <button type="button" id="btn-oct-up" class="toolbar-btn">Oct + (X) ▶</button>
+          <span class="kb-hint">PC キーボード: A W S E D F T G Y H U J K O L P ; '</span>
+        </div>
+      </div>
+
+      <div id="view-piano" class="piano-container">
+        <div id="piano-keyboard" class="piano-keyboard" role="group" aria-label="ピアノ鍵盤"></div>
+      </div>
+
+      <div id="view-drums" class="drums-container" hidden>
+        <div id="drum-pads-grid" class="drum-pads-grid" role="group" aria-label="GM 47 ドラムパッド"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <p>
+      <strong>SoundHall</strong> — Pure Rust Zero-Sample Physical Modeling &amp; Hybrid General MIDI Engine (`sound-hall-core` + `sound-hall-wasm`).
+      <a href="https://github.com/coco4atJP/sound-hall" target="_blank" rel="noopener noreferrer">GitHub Repository</a>
+    </p>
+  </footer>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

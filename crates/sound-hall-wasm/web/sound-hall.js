@@ -1,15 +1,17 @@
 /**
  * Zero-dependency ESM wrapper for loading `sound_hall_wasm.wasm`
- * in browsers (offline render or AudioWorklet) and Node.js.
+ * in browsers (AudioContext / AudioWorklet) and Node.js.
  */
 export class SoundHallWasm {
   constructor(instance, sampleRate = 44100, maxVoices = 64) {
     this.exports = instance.exports;
     this.sampleRate = sampleRate;
     this.ptr = this.exports.sh_engine_new(sampleRate, maxVoices);
-    this._planarFrames = 128;
+    this._planarFrames = 256;
     this._leftPtr = this.exports.sh_alloc(this._planarFrames * 4);
     this._rightPtr = this.exports.sh_alloc(this._planarFrames * 4);
+    this._encoder = new TextEncoder();
+    this._decoder = new TextDecoder();
     if (!this.ptr || !this._leftPtr || !this._rightPtr) {
       if (this._leftPtr) this.exports.sh_free(this._leftPtr, this._planarFrames * 4);
       if (this._rightPtr) this.exports.sh_free(this._rightPtr, this._planarFrames * 4);
@@ -89,6 +91,122 @@ export class SoundHallWasm {
   activeVoices() {
     if (!this.ptr) return 0;
     return this.exports.sh_active_voices(this.ptr);
+  }
+
+  loadDemo(demoIndex) {
+    if (!this.ptr) return -1;
+    return this.exports.sh_load_demo(this.ptr, demoIndex >>> 0);
+  }
+
+  loadScore(scoreText) {
+    if (!this.ptr) return -1;
+    const bytes = this._encoder.encode(scoreText);
+    if (bytes.length === 0) return -1;
+    const bufPtr = this.exports.sh_alloc(bytes.length);
+    if (!bufPtr) throw new Error("SoundHallWasm: score buffer allocation failed");
+    try {
+      new Uint8Array(this.exports.memory.buffer, bufPtr, bytes.length).set(bytes);
+      return this.exports.sh_load_score(this.ptr, bufPtr, bytes.length);
+    } finally {
+      this.exports.sh_free(bufPtr, bytes.length);
+    }
+  }
+
+  loadSmf(midiUint8Array) {
+    if (!this.ptr || !midiUint8Array || midiUint8Array.length === 0) return -1;
+    const len = midiUint8Array.length;
+    const bufPtr = this.exports.sh_alloc(len);
+    if (!bufPtr) throw new Error("SoundHallWasm: MIDI buffer allocation failed");
+    try {
+      new Uint8Array(this.exports.memory.buffer, bufPtr, len).set(midiUint8Array);
+      return this.exports.sh_load_smf(this.ptr, bufPtr, len);
+    } finally {
+      this.exports.sh_free(bufPtr, len);
+    }
+  }
+
+  lastError() {
+    if (!this.ptr) return "";
+    const len = this.exports.sh_last_error_len(this.ptr);
+    if (!len) return "";
+    const ptr = this.exports.sh_last_error_ptr(this.ptr);
+    return this._decoder.decode(new Uint8Array(this.exports.memory.buffer, ptr, len));
+  }
+
+  seqPlay() {
+    if (!this.ptr) return;
+    this.exports.sh_seq_play(this.ptr);
+  }
+
+  seqPause() {
+    if (!this.ptr) return;
+    this.exports.sh_seq_pause(this.ptr);
+  }
+
+  seqStop() {
+    if (!this.ptr) return;
+    this.exports.sh_seq_stop(this.ptr);
+  }
+
+  seqSeek(timeSec) {
+    if (!this.ptr) return;
+    this.exports.sh_seq_seek(this.ptr, timeSec);
+  }
+
+  seqIsPlaying() {
+    if (!this.ptr) return false;
+    return this.exports.sh_seq_is_playing(this.ptr) !== 0;
+  }
+
+  seqPositionSec() {
+    if (!this.ptr) return 0;
+    return this.exports.sh_seq_position_sec(this.ptr);
+  }
+
+  seqDurationSec() {
+    if (!this.ptr) return 0;
+    return this.exports.sh_seq_duration_sec(this.ptr);
+  }
+
+  activeNotesLow() {
+    if (!this.ptr) return 0n;
+    return BigInt.asUintN(64, this.exports.sh_active_notes_low(this.ptr));
+  }
+
+  activeNotesHigh() {
+    if (!this.ptr) return 0n;
+    return BigInt.asUintN(64, this.exports.sh_active_notes_high(this.ptr));
+  }
+
+  isNoteActive(note) {
+    if (!this.ptr || note < 0 || note > 127) return false;
+    if (note < 64) {
+      return (this.activeNotesLow() & (1n << BigInt(note))) !== 0n;
+    }
+    return (this.activeNotesHigh() & (1n << BigInt(note - 64))) !== 0n;
+  }
+
+  channelProgram(ch) {
+    if (!this.ptr) return 0;
+    return this.exports.sh_channel_program(this.ptr, ch & 0x0f);
+  }
+
+  channelActivity(ch) {
+    if (!this.ptr) return 0;
+    return this.exports.sh_channel_activity(this.ptr, ch & 0x0f);
+  }
+
+  channelLastNote(ch) {
+    if (!this.ptr) return 60;
+    return this.exports.sh_channel_last_note(this.ptr, ch & 0x0f);
+  }
+
+  exportSongWav(normalize = true) {
+    if (!this.ptr) return null;
+    const len = this.exports.sh_render_song_wav(this.ptr, normalize ? 1 : 0);
+    if (!len) return null;
+    const ptr = this.exports.sh_wav_ptr(this.ptr);
+    return new Uint8Array(this.exports.memory.buffer, ptr, len).slice();
   }
 
   renderPlanar(leftOut, rightOut) {

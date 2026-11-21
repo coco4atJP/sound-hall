@@ -509,3 +509,137 @@ fn audit_wav_validation_rejects_invalid_params() {
     let err = write_wav_f32(&mut out, 44100, 0, &[]).unwrap_err();
     assert_eq!(err.kind(), ErrorKind::InvalidInput);
 }
+
+/// Renders one dry note (no reverb/chorus) and returns interleaved stereo samples.
+fn render_dry_note(program: u8, note: u8, velocity: u8, secs: f32) -> Vec<f32> {
+    let sr = 44100.0_f32;
+    let mut engine = SoundHallEngine::new(sr);
+    engine.set_reverb_mix(0.0);
+    engine.set_chorus_mix(0.0);
+    engine.program_change(0, program);
+    engine.note_on(0, note, velocity);
+    let mut buf = vec![0.0_f32; (secs * sr) as usize * 2];
+    engine.render_stereo(&mut buf);
+    buf
+}
+
+/// Loudest 100 ms RMS window (dB) — a short-term loudness proxy fair to both
+/// percussive and sustained sounds.
+fn short_term_db(samples: &[f32]) -> f32 {
+    let win = 4410 * 2;
+    let hop = win / 4;
+    let mut best = 0.0_f32;
+    let mut i = 0;
+    while i + win <= samples.len() {
+        best = best.max(rms(&samples[i..i + win]));
+        i += hop;
+    }
+    20.0 * best.max(1e-9).log10()
+}
+
+fn representative_pitch(program: u8) -> u8 {
+    let (lo, hi) = get_preset(program).pitch_range;
+    if (lo..=hi).contains(&60) {
+        60
+    } else {
+        ((lo as u16 + hi as u16) / 2) as u8
+    }
+}
+
+#[test]
+fn verify_preset_loudness_is_balanced() {
+    let levels: Vec<(u8, f32)> = (0..128u8)
+        .map(|p| {
+            let buf = render_dry_note(p, representative_pitch(p), 100, 0.6);
+            (p, short_term_db(&buf))
+        })
+        .collect();
+    let mut sorted: Vec<f32> = levels.iter().map(|&(_, l)| l).collect();
+    sorted.sort_by(f32::total_cmp);
+    let median = sorted[sorted.len() / 2];
+    for (p, l) in levels {
+        assert!(
+            (l - median).abs() < 8.0,
+            "GM #{p} {} is {:+.1} dB from the preset median (unbalanced)",
+            get_preset(p).name_en,
+            l - median
+        );
+    }
+}
+
+#[test]
+fn verify_strings_are_dc_free_and_sustain() {
+    // Piano, nylon guitar, finger bass, harp, koto
+    for &program in &[0u8, 24, 33, 46, 107] {
+        let note = representative_pitch(program);
+        let buf = render_dry_note(program, note, 100, 2.0);
+        let mono: Vec<f32> = buf.chunks(2).map(|f| 0.5 * (f[0] + f[1])).collect();
+        let first = &mono[..44100];
+        let mean = first.iter().sum::<f32>() / first.len() as f32;
+        assert!(
+            mean.abs() < 0.02 * rms(first),
+            "GM #{program} has a DC offset: mean={mean} rms={}",
+            rms(first)
+        );
+        // A held plucked/struck string must still ring after one second
+        let early = rms(&mono[2205..6615]);
+        let late = rms(&mono[44100..48510]);
+        assert!(
+            late > early * 0.03,
+            "GM #{program} decays too fast: early={early} late={late}"
+        );
+    }
+}
+
+#[test]
+fn verify_velocity_shapes_loudness_and_timbre() {
+    // Piano, nylon guitar, vibraphone, strings, trumpet, flute, saw lead, organ
+    for &program in &[0u8, 24, 11, 48, 56, 73, 81, 16] {
+        let note = representative_pitch(program);
+        let soft = short_term_db(&render_dry_note(program, note, 30, 0.6));
+        let loud = short_term_db(&render_dry_note(program, note, 127, 0.6));
+        assert!(
+            loud - soft > 7.5,
+            "GM #{program} velocity range too flat: {:.1} dB",
+            loud - soft
+        );
+    }
+
+    // Harder piano strikes must be brighter: ratio of high-passed (first-difference)
+    // energy to total energy rises with velocity.
+    let brightness = |vel: u8| {
+        let buf = render_dry_note(0, 60, vel, 0.3);
+        let mono: Vec<f32> = buf.chunks(2).map(|f| 0.5 * (f[0] + f[1])).collect();
+        let diff: Vec<f32> = mono.windows(2).map(|w| w[1] - w[0]).collect();
+        rms(&diff) / rms(&mono).max(1e-9)
+    };
+    let (pp, ff) = (brightness(30), brightness(127));
+    assert!(
+        ff > pp * 1.3,
+        "piano timbre should brighten with velocity: pp={pp} ff={ff}"
+    );
+}
+
+#[test]
+fn verify_master_limiter_keeps_dense_mix_clean() {
+    let sr = 44100.0_f32;
+    let mut engine = SoundHallEngine::new(sr);
+    engine.set_master_gain(2.5);
+    for ch in 0..8u8 {
+        engine.program_change(ch, [0u8, 48, 61, 81, 89, 19, 33, 56][ch as usize]);
+        for n in [48u8, 55, 60, 64, 67] {
+            engine.note_on(ch, n, 127);
+        }
+    }
+    let mut buf = vec![0.0_f32; (1.0 * sr) as usize * 2];
+    engine.render_stereo(&mut buf);
+    assert!(buf.iter().all(|s| s.is_finite()));
+    assert!(
+        peak(&buf) <= 0.95,
+        "limiter ceiling exceeded: {}",
+        peak(&buf)
+    );
+    assert!(engine.limiter_gain() < 1.0, "limiter should be engaged");
+    let mean_l = buf.iter().step_by(2).sum::<f32>() / (buf.len() / 2) as f32;
+    assert!(mean_l.abs() < 0.01, "master output carries DC: {mean_l}");
+}

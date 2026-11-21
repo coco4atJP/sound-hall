@@ -66,20 +66,13 @@ impl ModalBank {
         specs[..count].copy_from_slice(&modes[..count]);
 
         let hardness = (mallet_hardness * (0.55 + 0.45 * velocity)).clamp(0.05, 1.0);
-        // Softer mallet -> longer contact time -> warm low-passed attack
-        let contact_sec = 0.00035 + (1.0 - hardness) * 0.0045;
+        // Softer mallet -> longer contact time -> warm low-passed attack. The contact can never
+        // be so long that the pulse spectrum nulls the fundamental (first zero at 1.5 / T):
+        // small, high-pitched bars/blocks get the short contact they physically have.
+        let fund_hz = (freq * specs[0].ratio).max(20.0);
+        let contact_sec = (0.00035 + (1.0 - hardness) * 0.0045).min(0.6 / fund_hz);
         let exc_len = ((contact_sec * sr).round() as usize).max(4);
-        // Normalize half-sine pulse integral to 1.0 so modal peak amplitudes equal `spec.amp`
-        let mut pulse_sum = 0.0_f32;
-        for i in 0..exc_len {
-            let t = (i as f32 + 0.5) / exc_len as f32;
-            pulse_sum += (PI * t).sin();
-        }
-        let exc_norm = if pulse_sum > 1e-6 {
-            velocity / pulse_sum
-        } else {
-            velocity
-        };
+        let exc_norm = Self::pulse_norm(exc_len, velocity, fund_hz * exc_len as f32 / sr);
 
         let mut bank = Self {
             specs,
@@ -133,19 +126,34 @@ impl ModalBank {
         }
     }
 
+    /// Pulse normalisation: unit integral, then compensate the half-sine pulse spectrum at the
+    /// fundamental (`f_t` = f0 · T) so mallet hardness shapes brightness, not overall loudness.
+    fn pulse_norm(exc_len: usize, velocity: f32, f_t: f32) -> f32 {
+        let mut pulse_sum = 0.0_f32;
+        for i in 0..exc_len {
+            let t = (i as f32 + 0.5) / exc_len as f32;
+            pulse_sum += (PI * t).sin();
+        }
+        let x = 2.0 * f_t;
+        let fund_resp = if (1.0 - x * x).abs() > 1e-3 {
+            ((PI * f_t).cos() / (1.0 - x * x)).abs()
+        } else {
+            PI / 4.0
+        };
+        let comp = 1.0 / fund_resp.clamp(0.5, 1.0);
+        if pulse_sum > 1e-6 {
+            velocity * comp / pulse_sum
+        } else {
+            velocity
+        }
+    }
+
     /// Re-excites the modal bank (e.g. for roll or rattle bursts).
     pub fn re_excite(&mut self, velocity: f32) {
         self.exc_pos = 0;
-        let mut pulse_sum = 0.0_f32;
-        for i in 0..self.exc_len {
-            let t = (i as f32 + 0.5) / self.exc_len as f32;
-            pulse_sum += (PI * t).sin();
-        }
-        self.exc_norm = if pulse_sum > 1e-6 {
-            velocity / pulse_sum
-        } else {
-            velocity
-        };
+        let f_t = self.cached_freq.max(20.0) * self.specs[0].ratio * self.exc_len as f32
+            / self.cached_sr.max(8000.0);
+        self.exc_norm = Self::pulse_norm(self.exc_len, velocity, f_t);
     }
 
     /// Renders one mono sample at `freq`.

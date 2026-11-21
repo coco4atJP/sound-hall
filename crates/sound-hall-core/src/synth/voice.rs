@@ -1,8 +1,8 @@
 use std::f32::consts::PI;
 
 use crate::dsp::envelope::{Adsr, AdsrParams, Lfo};
-use crate::dsp::filter::{FormantBank, OnePoleLp, SvfFilter, SvfMode};
-use crate::dsp::math::{flush_denormal, midi_to_hz, soft_clip, Rng};
+use crate::dsp::filter::{FormantBank, OnePoleLp, StereoSvf, SvfFilter, SvfMode};
+use crate::dsp::math::{flush_denormal, midi_to_hz, soft_limit, Rng};
 use crate::dsp::modal::ModalBank;
 use crate::dsp::oscillator::{PolyBlepOsc, Waveform};
 use crate::dsp::waveguide::{BowedStringModel, PluckedStringModel, WindBoreModel};
@@ -13,6 +13,25 @@ use super::patch::{
 };
 
 const DRAWBAR_RATIOS: [f32; 9] = [0.5, 1.5, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 8.0];
+
+/// Velocity at which presets are loudness-calibrated (MIDI 100).
+pub(crate) const VELOCITY_REF: f32 = 100.0 / 127.0;
+
+/// Extra velocity→gain exponent per engine, on top of each model's own physical velocity
+/// response, so that pp→ff spans a musical range (~19–20 dB struck/plucked, ~14–15 dB
+/// bowed/blown, ~9 dB organ) instead of the flat 4–6 dB the sustained models give alone.
+fn velocity_exponent(patch: &SynthEngineKind) -> f32 {
+    match patch {
+        SynthEngineKind::HammeredString(_) => 0.37,
+        SynthEngineKind::PluckedString(_) => 0.38,
+        SynthEngineKind::ModalPercussion(_) => 0.58,
+        SynthEngineKind::Fm4Op(_) => 0.22,
+        SynthEngineKind::AdditiveOrgan(_) => 0.30,
+        SynthEngineKind::FormantSubtractive(_) => 0.67,
+        SynthEngineKind::BowedString(_) => 0.80,
+        SynthEngineKind::WindBore(_) => 0.74,
+    }
+}
 
 enum EngineRuntime {
     Plucked {
@@ -27,6 +46,7 @@ enum EngineRuntime {
     Hammered {
         params: HammeredParams,
         strings: Vec<PluckedStringModel>,
+        detune_ratios: [f32; 3],
         thump_rng: Rng,
         thump_lp: OnePoleLp,
         thump_remaining: usize,
@@ -81,8 +101,8 @@ enum EngineRuntime {
         osc2: PolyBlepOsc,
         sub_osc: PolyBlepOsc,
         noise_rng: Rng,
-        filter: SvfFilter,
-        formants: Option<FormantBank>,
+        filter: StereoSvf,
+        formants: Option<(FormantBank, FormantBank)>,
         lfo: PolyBlepOsc,
         adsr: Adsr,
         filter_env: f32,
@@ -231,9 +251,14 @@ impl Voice {
                         ));
                     }
                     let thump_total = ((0.008 * sr).round() as usize).max(16);
+                    let mut detune_ratios = [1.0_f32; 3];
+                    for (ratio, &offset) in detune_ratios.iter_mut().zip(detune_offsets) {
+                        *ratio = 2.0_f32.powf(offset * p.detune_cents / 1200.0);
+                    }
                     EngineRuntime::Hammered {
                         params: p,
                         strings,
+                        detune_ratios,
                         thump_rng: Rng::new(seed ^ 0xBEEF),
                         thump_lp: OnePoleLp::new(),
                         thump_remaining: thump_total,
@@ -375,14 +400,16 @@ impl Voice {
                                     .with_phase(if i == 0 { 0.0 } else { rng.next_f32_unipolar() })
                             })
                             .collect();
-                    let formants = p.formant.map(|fp| FormantBank::new(fp, sr));
+                    let formants = p
+                        .formant
+                        .map(|fp| (FormantBank::new(fp, sr), FormantBank::new(fp, sr)));
                     EngineRuntime::Sub {
                         params: p,
                         unison_oscs,
                         osc2: PolyBlepOsc::new(seed ^ 0xCAFE),
                         sub_osc: PolyBlepOsc::new(seed ^ 0xBABE),
                         noise_rng: Rng::new(seed ^ 0xDEAD),
-                        filter: SvfFilter::new(),
+                        filter: StereoSvf::new(),
                         formants,
                         lfo: PolyBlepOsc::new(seed ^ 0xFACE),
                         adsr,
@@ -392,12 +419,13 @@ impl Voice {
                 }
             };
 
+        let vel_gain = (velocity / VELOCITY_REF).powf(velocity_exponent(&preset.patch));
         Self {
             channel,
             note,
             velocity,
             base_hz,
-            gain: preset.gain,
+            gain: preset.gain * vel_gain,
             reverb_send: (preset.default_reverb * 0.7 + reverb_override * 0.3).clamp(0.0, 1.0),
             chorus_send: (preset.default_chorus.max(chorus_override)).clamp(0.0, 1.0),
             age,
@@ -561,6 +589,7 @@ impl Voice {
             EngineRuntime::Hammered {
                 params,
                 strings,
+                detune_ratios,
                 thump_rng,
                 thump_lp,
                 thump_remaining,
@@ -579,15 +608,8 @@ impl Voice {
                 let mut sum_l = 0.0_f32;
                 let mut sum_r = 0.0_f32;
                 let count = strings.len();
-                let detune_offsets: &[f32] = match count {
-                    1 => &[0.0],
-                    2 => &[-0.5, 0.5],
-                    _ => &[-1.0, 0.0, 1.0],
-                };
                 for (idx, s_model) in strings.iter_mut().enumerate() {
-                    let cents = detune_offsets[idx] * params.detune_cents;
-                    let f = freq * 2.0_f32.powf(cents / 1200.0);
-                    let y = s_model.next_sample(f, sr);
+                    let y = s_model.next_sample(freq * detune_ratios[idx], sr);
                     let pan_offset = if count > 1 {
                         (idx as f32 / (count - 1) as f32 - 0.5) * params.stereo_width
                     } else {
@@ -932,26 +954,32 @@ impl Voice {
                     + params.lfo_filter_amt * lfo_val)
                     .clamp(35.0, 0.45 * sr);
 
-                let mono_mix = 0.5 * (mono_l + mono_r);
-                let side = 0.5 * (mono_l - mono_r);
-                let mut filt_mono =
-                    filter.process(mono_mix, cutoff, params.resonance_q, sr, params.filter_mode);
+                // Filter both sides: the unison/stereo spread must go through the same filter,
+                // otherwise bright unfiltered detuned saws leak around every filter sweep.
+                let (mut fl, mut fr) = filter.process(
+                    mono_l,
+                    mono_r,
+                    cutoff,
+                    params.resonance_q,
+                    sr,
+                    params.filter_mode,
+                );
 
-                if let Some(fmt) = formants {
-                    let f_sig = fmt.process(filt_mono) * 1.35;
-                    filt_mono = filt_mono * (1.0 - params.formant_mix) + f_sig * params.formant_mix;
+                if let Some((fmt_l, fmt_r)) = formants {
+                    let mix = params.formant_mix;
+                    fl = fl * (1.0 - mix) + fmt_l.process(fl) * 1.35 * mix;
+                    fr = fr * (1.0 - mix) + fmt_r.process(fr) * 1.35 * mix;
                 }
 
+                let mid = 0.5 * (fl + fr);
+                let side = 0.5 * (fl - fr) * 0.65;
                 let amp = env * (0.35 + 0.65 * vel);
-                (
-                    (filt_mono + side * 0.65) * amp,
-                    (filt_mono - side * 0.65) * amp,
-                )
+                ((mid + side) * amp, (mid - side) * amp)
             }
         };
 
-        out_l = soft_clip(out_l) * self.gain * expression * self.steal_gain;
-        out_r = soft_clip(out_r) * self.gain * expression * self.steal_gain;
+        out_l = soft_limit(out_l) * self.gain * expression * self.steal_gain;
+        out_r = soft_limit(out_r) * self.gain * expression * self.steal_gain;
         self.last_level = 0.5 * (out_l.abs() + out_r.abs());
         (out_l, out_r)
     }

@@ -97,6 +97,54 @@ impl SvfFilter {
     }
 }
 
+/// Stereo pair of Cytomic SVFs sharing one coefficient set (one `tan()` per sample for both).
+#[derive(Clone, Debug, Default)]
+pub struct StereoSvf {
+    left: SvfFilter,
+    right_ic1eq: f32,
+    right_ic2eq: f32,
+}
+
+impl StereoSvf {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn reset(&mut self) {
+        self.left.reset();
+        self.right_ic1eq = 0.0;
+        self.right_ic2eq = 0.0;
+    }
+
+    #[inline]
+    pub fn process(
+        &mut self,
+        left: f32,
+        right: f32,
+        cutoff: f32,
+        q: f32,
+        sr: f32,
+        mode: SvfMode,
+    ) -> (f32, f32) {
+        let yl = self.left.process(left, cutoff, q, sr, mode);
+        let f = &self.left;
+        let x = if right.is_finite() { right } else { 0.0 };
+        let v3 = x - self.right_ic2eq;
+        let v1 = f.a1 * self.right_ic1eq + f.a2 * v3;
+        let v2 = self.right_ic2eq + f.a2 * self.right_ic1eq + f.a3 * v3;
+        self.right_ic1eq = flush_denormal(2.0 * v1 - self.right_ic1eq);
+        self.right_ic2eq = flush_denormal(2.0 * v2 - self.right_ic2eq);
+        let yr = match mode {
+            SvfMode::LowPass => v2,
+            SvfMode::BandPass => v1,
+            SvfMode::HighPass => x - f.k * v1 - v2,
+            SvfMode::Notch => x - f.k * v1,
+            SvfMode::Peak => 2.0 * v2 - x + f.k * v1,
+        };
+        (yl, yr)
+    }
+}
+
 /// Simple one-pole lowpass filter.
 #[derive(Clone, Debug, Default)]
 pub struct OnePoleLp {
@@ -153,6 +201,17 @@ impl DcBlocker {
             x1: 0.0,
             y1: 0.0,
             r: r.clamp(0.9, 0.9995),
+        }
+    }
+
+    /// Creates a DC blocker whose -3 dB corner sits at `cutoff_hz` for sample rate `sr`.
+    pub fn with_cutoff(cutoff_hz: f32, sr: f32) -> Self {
+        let sr = sr.max(8000.0);
+        let r = (-TAU * cutoff_hz.max(1.0) / sr).exp();
+        Self {
+            x1: 0.0,
+            y1: 0.0,
+            r: r.clamp(0.9, 0.99995),
         }
     }
 

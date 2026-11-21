@@ -1,7 +1,7 @@
-use std::f32::consts::{PI, TAU};
+use std::f32::consts::TAU;
 
 use super::filter::{Allpass1, BodyResonator, DcBlocker, FormantBank, FormantPreset, OnePoleLp};
-use super::math::{flush_denormal, soft_clip, wrap_phase, Rng};
+use super::math::{flush_denormal, soft_clip, soft_limit, wrap_phase, Rng};
 
 /// Fractional delay line using 4-point Catmull-Rom / Hermite cubic interpolation.
 #[derive(Clone, Debug)]
@@ -72,6 +72,10 @@ impl DelayLine {
 
 /// Extended Karplus-Strong plucked string waveguide with pick-comb, stiffness dispersion,
 /// optional buzz nonlinearity (Sitar/Shamisen), and wooden body resonance.
+///
+/// The loop honours the requested RT60 exactly (no hidden per-period loss and no `tanh`
+/// compression inside the feedback path), and the excitation is DC-free so the energy of the
+/// pluck goes into the musical partials instead of a slowly decaying DC offset.
 #[derive(Clone, Debug)]
 pub struct PluckedStringModel {
     delay: DelayLine,
@@ -79,12 +83,17 @@ pub struct PluckedStringModel {
     pick_comb_idx: usize,
     prev_loop: f32,
     dispersion: Allpass1,
-    dc_blocker: DcBlocker,
+    buzz_dc: DcBlocker,
+    out_dc: DcBlocker,
     exc_lp: OnePoleLp,
+    exc_hp: OnePoleLp,
+    exc_lp_pole: f32,
+    exc_hp_pole: f32,
     body: BodyResonator,
     rng: Rng,
     exc_remaining: usize,
     exc_total: usize,
+    hardness: f32,
     pick_pos: f32,
     brightness: f32,
     rt60: f32,
@@ -93,6 +102,14 @@ pub struct PluckedStringModel {
     buzz: f32,
     velocity: f32,
     released: bool,
+    // Loop coefficients cached per (frequency, damper state); recomputed only on change.
+    cached_freq: f32,
+    cached_released: bool,
+    loop_b: f32,
+    loop_ap: f32,
+    loop_use_ap: bool,
+    loop_delay: f32,
+    loop_rho: f32,
 }
 
 impl PluckedStringModel {
@@ -113,11 +130,18 @@ impl PluckedStringModel {
         seed: u64,
     ) -> Self {
         let sr = sr.max(8000.0);
+        let freq = freq.clamp(16.0, 0.42 * sr);
         let max_delay = ((sr / 15.0) as usize).max(512);
-        let period = (sr / freq.max(16.0)).clamp(4.0, max_delay as f32);
-        // Excite for roughly 1.2 string periods (clamped to sensible range)
-        let exc_total = (period * 1.15).round().clamp(16.0, sr * 0.025) as usize;
+        let period = (sr / freq).clamp(4.0, max_delay as f32);
+        // Excite for exactly one string period so the loop is filled with one clean cycle
+        let exc_total = period.round().clamp(4.0, max_delay as f32 - 4.0) as usize;
         let pick_comb_len = (exc_total + 16).next_power_of_two();
+        let brightness = brightness.clamp(0.05, 0.99);
+        let velocity = velocity.clamp(0.05, 1.0);
+        // Pluck/hammer hardness: harder (and brighter) attacks put more energy in the upper
+        // partials — the main timbral cue of playing dynamics on any struck/plucked string.
+        let hardness = (brightness * (0.35 + 0.65 * velocity)).clamp(0.05, 1.0);
+        let exc_fc = 600.0 + hardness * hardness.sqrt() * 11000.0;
 
         Self {
             delay: DelayLine::new(max_delay),
@@ -125,20 +149,34 @@ impl PluckedStringModel {
             pick_comb_idx: 0,
             prev_loop: 0.0,
             dispersion: Allpass1::new(),
-            dc_blocker: DcBlocker::new(0.995),
+            // In-loop DC blocker: corner far below any string pitch so it adds no damping
+            buzz_dc: DcBlocker::with_cutoff(4.0, sr),
+            out_dc: DcBlocker::with_cutoff(12.0, sr),
             exc_lp: OnePoleLp::new(),
+            exc_hp: OnePoleLp::new(),
+            exc_lp_pole: OnePoleLp::coeff_from_cutoff(exc_fc, sr),
+            // Remove DC / sub-fundamental thump from the pluck (first-order HP at f0 / 2)
+            exc_hp_pole: OnePoleLp::coeff_from_cutoff(freq * 0.5, sr),
             body: BodyResonator::new(body_specs, body_dry, body_wet, sr),
             rng: Rng::new(seed),
             exc_remaining: exc_total,
             exc_total,
+            hardness,
             pick_pos: pick_pos.clamp(0.04, 0.5),
-            brightness: brightness.clamp(0.05, 0.99),
+            brightness,
             rt60: rt60.max(0.05),
             release_damping: release_damping.clamp(0.01, 10.0),
             stiffness: stiffness.clamp(0.0, 0.95),
             buzz: buzz.clamp(0.0, 1.0),
-            velocity: velocity.clamp(0.05, 1.0),
+            velocity,
             released: false,
+            cached_freq: -1.0,
+            cached_released: false,
+            loop_b: 0.0,
+            loop_ap: 0.0,
+            loop_use_ap: false,
+            loop_delay: period,
+            loop_rho: 0.99,
         }
     }
 
@@ -146,40 +184,19 @@ impl PluckedStringModel {
         self.released = true;
     }
 
-    #[inline]
-    pub fn next_sample(&mut self, freq: f32, sr: f32) -> f32 {
-        let sr = sr.max(8000.0);
-        let freq = freq.clamp(16.0, 0.42 * sr);
+    /// Recomputes loop filter, dispersion, fractional delay and loss for `freq`.
+    fn update_loop(&mut self, freq: f32, sr: f32) {
+        self.cached_freq = freq;
+        self.cached_released = self.released;
         let period = sr / freq;
         let w = TAU * freq / sr;
 
-        // Excitation burst shaped by velocity-dependent LP + pick-position comb filter
-        let mut exc = 0.0_f32;
-        if self.exc_remaining > 0 {
-            let prog = 1.0 - (self.exc_remaining as f32 / self.exc_total as f32);
-            let win = (PI * prog).sin();
-            // Combine deterministic displacement pulse (for warm fundamental) + noise burst
-            let noise = self.rng.next_f32_bipolar() * 0.55 + self.rng.next_pink() * 0.38;
-            let raw = (win * 0.65 + noise * win) * 0.85;
-            let exc_fc = 800.0 + (self.brightness * 0.65 + self.velocity * 0.35) * 12000.0;
-            let shaped = self.exc_lp.process_cutoff(raw, exc_fc, sr);
-
-            let mask = self.pick_comb_buf.len() - 1;
-            let pick_d = ((period * self.pick_pos).round() as usize).clamp(1, mask);
-            self.pick_comb_buf[self.pick_comb_idx] = shaped;
-            let delayed_pick = self.pick_comb_buf[self.pick_comb_idx.wrapping_sub(pick_d) & mask];
-            self.pick_comb_idx = (self.pick_comb_idx + 1) & mask;
-            exc = (shaped - delayed_pick * 0.50) * self.velocity * 0.65;
-            self.exc_remaining -= 1;
-        }
-
-        // Loop filter damping parameter `b` (0 = bright, 0.48 = warm)
+        // Loop filter damping parameter `b` (0 = bright, 0.46 = warm)
         let eff_bright = (self.brightness * (0.65 + 0.35 * self.velocity)).clamp(0.05, 0.98);
         let mut b = (1.0 - eff_bright) * 0.46;
         if period < 12.0 {
             b *= (period / 12.0).clamp(0.1, 1.0);
         }
-
         // Exact phase delay of 2-point FIR (1 - b) + b * z^-1
         let d_fir = if w > 1e-4 {
             (b * w.sin()).atan2((1.0 - b) + b * w.cos()) / w
@@ -200,42 +217,100 @@ impl PluckedStringModel {
             0.0
         };
 
-        let delay_samples = (period - d_fir - d_ap).max(2.0);
-        let delayed = self.delay.read_frac(delay_samples);
-
-        // 2-point FIR lowpass
-        let lp = (1.0 - b) * delayed + b * self.prev_loop;
-        self.prev_loop = delayed;
-
-        // Dispersion allpass
-        let mut filtered = if use_ap {
-            self.dispersion.process(lp, a_ap)
-        } else {
-            lp
-        };
-
-        // Optional buzz bridge (Sitar jawari / Shamisen sawari)
-        if self.buzz > 0.01 {
-            let b_amt = self.buzz * 0.55;
-            filtered = filtered + b_amt * (filtered.max(0.0) * 0.5 - 0.18 * filtered * filtered);
-            filtered = self.dc_blocker.process(filtered);
-        }
-
-        // Compute RT60 loss per period (bass rings longer, treble decays slightly faster)
+        // RT60 loss per period (bass rings longer, treble decays faster); the damper
+        // (note-off) shortens it to `release_damping`.
         let pitch_scale = (261.63 / freq.max(40.0)).powf(0.32).clamp(0.45, 2.2);
         let target_rt60 = if self.released {
             self.rt60.min(self.release_damping)
         } else {
             self.rt60 * pitch_scale
         };
-        let rho = 0.001_f32
-            .powf(1.0 / (target_rt60.max(0.015) * freq))
-            .clamp(0.65, 0.99965);
 
-        let loop_val = soft_clip((filtered * rho + exc) * 0.98);
+        self.loop_b = b;
+        self.loop_ap = a_ap;
+        self.loop_use_ap = use_ap;
+        self.loop_delay = (period - d_fir - d_ap).max(2.0);
+        self.loop_rho = 0.001_f32
+            .powf(1.0 / (target_rt60.max(0.015) * freq))
+            .clamp(0.65, 0.99985);
+    }
+
+    #[inline]
+    pub fn next_sample(&mut self, freq: f32, sr: f32) -> f32 {
+        let sr = sr.max(8000.0);
+        let freq = freq.clamp(16.0, 0.42 * sr);
+        if (freq - self.cached_freq).abs() > 1e-3 || self.released != self.cached_released {
+            self.update_loop(freq, sr);
+        }
+
+        // Excitation: one period of the string's initial state, blending
+        //  - displacement: triangle with apex at the pick point (partials ~ sin(n*pi*b)/n^2,
+        //    soft finger / felt character), and
+        //  - velocity: zero-mean pulse of duty b (partials ~ sin(n*pi*b)/n, pick / hard
+        //    hammer character),
+        // by attack hardness, plus a pick-point-combed noise burst for grit. Everything is
+        // hardness low-passed and DC-free; pick-position notches come out naturally.
+        let mut exc = 0.0_f32;
+        if self.exc_remaining > 0 {
+            let beta = self.pick_pos;
+            let prog = 1.0 - (self.exc_remaining as f32 / self.exc_total as f32);
+            // Start at the triangle's rising zero crossing so the onset is click-free
+            let x = wrap_phase(prog + beta * 0.5);
+            let tri = if x < beta {
+                x / beta
+            } else {
+                (1.0 - x) / (1.0 - beta)
+            };
+            let pulse = if x < beta { 1.0 - beta } else { -beta };
+            let h = self.hardness;
+            let shape = (2.0 * tri - 1.0) * (1.0 - h) + pulse * 2.4 * h;
+
+            let noise = self.rng.next_f32_bipolar() * 0.55 + self.rng.next_pink() * 0.38;
+            let mask = self.pick_comb_buf.len() - 1;
+            let pick_d = ((sr / freq * beta).round() as usize).clamp(1, mask);
+            self.pick_comb_buf[self.pick_comb_idx] = noise;
+            let delayed_pick = self.pick_comb_buf[self.pick_comb_idx.wrapping_sub(pick_d) & mask];
+            self.pick_comb_idx = (self.pick_comb_idx + 1) & mask;
+            let combed_noise = (noise - delayed_pick) * 0.5;
+
+            let grit = 0.12 + 0.28 * self.brightness * self.velocity;
+            let raw = shape * (1.0 - grit) + combed_noise * grit;
+            let lp = self.exc_lp.process_pole(raw, self.exc_lp_pole);
+            let shaped = lp - self.exc_hp.process_pole(lp, self.exc_hp_pole);
+            exc = shaped * self.velocity * 0.55;
+            self.exc_remaining -= 1;
+        }
+
+        let delayed = self.delay.read_frac(self.loop_delay);
+
+        // 2-point FIR lowpass
+        let b = self.loop_b;
+        let lp = (1.0 - b) * delayed + b * self.prev_loop;
+        self.prev_loop = delayed;
+
+        // Dispersion allpass
+        let mut filtered = if self.loop_use_ap {
+            self.dispersion.process(lp, self.loop_ap)
+        } else {
+            lp
+        };
+
+        // Optional buzz bridge (Sitar jawari / Shamisen sawari): the string grazes a curved
+        // bridge on one side. Modelled as a *passive* one-sided soft contact (|y| <= |x|), so
+        // it spreads energy into bright buzzing partials without ever adding energy — the
+        // string still decays naturally and the buzz grows with playing strength.
+        if self.buzz > 0.01 {
+            let t = 0.10 * (1.0 - 0.6 * self.buzz);
+            if filtered < -t {
+                filtered = -t + (filtered + t) * (1.0 - 0.5 * self.buzz);
+            }
+            filtered = self.buzz_dc.process(filtered);
+        }
+
+        let loop_val = soft_limit(filtered * self.loop_rho + exc);
         self.delay.write(loop_val);
 
-        self.body.process(loop_val)
+        self.out_dc.process(self.body.process(loop_val))
     }
 }
 

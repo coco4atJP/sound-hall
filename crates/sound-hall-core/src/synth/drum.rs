@@ -1,7 +1,7 @@
 use std::f32::consts::TAU;
 
 use crate::dsp::filter::{SvfFilter, SvfMode};
-use crate::dsp::math::{soft_clip, Rng};
+use crate::dsp::math::{equal_power_pan, soft_clip, Rng};
 use crate::dsp::modal::{ModalBank, ModeSpec};
 use crate::dsp::oscillator::{PolyBlepOsc, Waveform};
 
@@ -95,6 +95,10 @@ pub struct DrumVoice {
     pub pan: f32,
     pub gain: f32,
     pub age: u64,
+    /// Reverb send scale: kicks stay tight and dry, shells and cymbals bloom.
+    pub reverb_scale: f32,
+    pan_key: f32,
+    pan_lr: (f32, f32),
     velocity: f32,
     elapsed: f32,
     choking: bool,
@@ -111,6 +115,8 @@ pub struct DrumVoice {
 impl DrumVoice {
     pub fn new(patch: &DrumPatch, velocity_u8: u8, sr: f32, age: u64) -> Self {
         let velocity = (velocity_u8.max(1) as f32 / 127.0).clamp(0.05, 1.0);
+        // Steeper-than-linear dynamics (~19 dB from vel 30 to 127), unity at vel 100
+        let vel_gain = (velocity / (100.0 / 127.0)).sqrt();
         let seed = age.wrapping_mul(0x517C_C1B7_2722_0A95) ^ (patch.note as u64);
         let modal = match patch.model {
             DrumModelKind::ModalDrum {
@@ -125,12 +131,24 @@ impl DrumVoice {
             _ => None,
         };
 
+        let reverb_scale = match patch.model {
+            DrumModelKind::Kick { .. } => 0.25,
+            DrumModelKind::MetallicCymbal { .. } => 0.75,
+            DrumModelKind::ShakerScrape { .. } => 0.8,
+            _ => 1.0,
+        };
         Self {
             note: patch.note,
             choke_group: patch.choke_group,
             pan: patch.default_pan,
-            gain: patch.gain,
+            gain: patch.gain * vel_gain,
             age,
+            reverb_scale,
+            pan_key: f32::NAN,
+            pan_lr: (
+                core::f32::consts::FRAC_1_SQRT_2,
+                core::f32::consts::FRAC_1_SQRT_2,
+            ),
             velocity,
             elapsed: 0.0,
             choking: false,
@@ -147,6 +165,16 @@ impl DrumVoice {
 
     pub fn choke(&mut self) {
         self.choking = true;
+    }
+
+    /// Equal-power pan gains for this drum given the channel pan (cached until it changes).
+    #[inline]
+    pub fn pan_gains(&mut self, channel_pan: f32) -> (f32, f32) {
+        if channel_pan != self.pan_key {
+            self.pan_key = channel_pan;
+            self.pan_lr = equal_power_pan((self.pan + (channel_pan - 0.5)).clamp(0.0, 1.0));
+        }
+        self.pan_lr
     }
 
     #[inline]

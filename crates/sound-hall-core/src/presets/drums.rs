@@ -81,7 +81,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "アコースティック・バスドラム",
         choke_group: 0,
         default_pan: 0.50,
-        gain: 1.05,
+        gain: 1.07,
         model: DrumModelKind::Kick {
             f_start: 125.0,
             f_end: 46.0,
@@ -96,7 +96,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "バスドラム1",
         choke_group: 0,
         default_pan: 0.50,
-        gain: 1.08,
+        gain: 1.06,
         model: DrumModelKind::Kick {
             f_start: 155.0,
             f_end: 50.0,
@@ -111,7 +111,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "サイドスティック (リムショット)",
         choke_group: 0,
         default_pan: 0.46,
-        gain: 0.95,
+        gain: 1.19,
         model: DrumModelKind::ModalDrum {
             base_hz: 960.0,
             modes: SIDESTICK_MODES,
@@ -126,7 +126,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "アコースティック・スネア",
         choke_group: 0,
         default_pan: 0.48,
-        gain: 0.96,
+        gain: 1.38,
         model: DrumModelKind::Snare {
             body_hz: 185.0,
             body_decay: 0.075,
@@ -142,7 +142,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "ハンドクラップ",
         choke_group: 0,
         default_pan: 0.52,
-        gain: 0.90,
+        gain: 1.41,
         model: DrumModelKind::Clap {
             filter_hz: 1450.0,
             decay: 0.075,
@@ -155,7 +155,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "エレクトリック・スネア",
         choke_group: 0,
         default_pan: 0.48,
-        gain: 0.96,
+        gain: 1.17,
         model: DrumModelKind::Snare {
             body_hz: 215.0,
             body_decay: 0.065,
@@ -171,7 +171,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "ロー・フロアタム",
         choke_group: 0,
         default_pan: 0.68,
-        gain: 0.96,
+        gain: 0.95,
         model: DrumModelKind::Tom {
             f_start: 120.0,
             f_end: 68.0,
@@ -186,7 +186,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "クローズド・ハイハット",
         choke_group: 1,
         default_pan: 0.36,
-        gain: 0.85,
+        gain: 1.55,
         model: DrumModelKind::MetallicCymbal {
             base_hz: 415.0,
             hp_hz: 6200.0,
@@ -202,7 +202,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "ハイ・フロアタム",
         choke_group: 0,
         default_pan: 0.64,
-        gain: 0.96,
+        gain: 0.93,
         model: DrumModelKind::Tom {
             f_start: 145.0,
             f_end: 82.0,
@@ -217,7 +217,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "ペダル・ハイハット",
         choke_group: 1,
         default_pan: 0.36,
-        gain: 0.82,
+        gain: 0.86,
         model: DrumModelKind::MetallicCymbal {
             base_hz: 390.0,
             hp_hz: 4800.0,
@@ -233,7 +233,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "ロー・タム",
         choke_group: 0,
         default_pan: 0.60,
-        gain: 0.95,
+        gain: 0.91,
         model: DrumModelKind::Tom {
             f_start: 175.0,
             f_end: 98.0,
@@ -248,7 +248,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "オープン・ハイハット",
         choke_group: 1,
         default_pan: 0.36,
-        gain: 0.84,
+        gain: 0.96,
         model: DrumModelKind::MetallicCymbal {
             base_hz: 415.0,
             hp_hz: 5800.0,
@@ -264,7 +264,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "ローミッド・タム",
         choke_group: 0,
         default_pan: 0.54,
-        gain: 0.95,
+        gain: 0.91,
         model: DrumModelKind::Tom {
             f_start: 210.0,
             f_end: 118.0,
@@ -279,7 +279,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "ハイミッド・タム",
         choke_group: 0,
         default_pan: 0.46,
-        gain: 0.94,
+        gain: 0.92,
         model: DrumModelKind::Tom {
             f_start: 245.0,
             f_end: 140.0,
@@ -294,7 +294,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "クラッシュシンバル1",
         choke_group: 0,
         default_pan: 0.30,
-        gain: 0.82,
+        gain: 0.93,
         model: DrumModelKind::MetallicCymbal {
             base_hz: 365.0,
             hp_hz: 3800.0,
@@ -310,7 +310,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "ハイ・タム",
         choke_group: 0,
         default_pan: 0.40,
-        gain: 0.94,
+        gain: 0.92,
         model: DrumModelKind::Tom {
             f_start: 295.0,
             f_end: 170.0,
@@ -325,7 +325,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "ライドシンバル1",
         choke_group: 0,
         default_pan: 0.66,
-        gain: 0.82,
+        gain: 0.90,
         model: DrumModelKind::MetallicCymbal {
             base_hz: 470.0,
             hp_hz: 4600.0,
@@ -341,7 +341,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "チャイニーズシンバル",
         choke_group: 0,
         default_pan: 0.72,
-        gain: 0.82,
+        gain: 0.79,
         model: DrumModelKind::MetallicCymbal {
             base_hz: 315.0,
             hp_hz: 2600.0,
@@ -357,7 +357,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "ライドベル",
         choke_group: 0,
         default_pan: 0.66,
-        gain: 0.88,
+        gain: 0.52,
         model: DrumModelKind::ModalDrum {
             base_hz: 860.0,
             modes: RIDE_BELL_MODES,
@@ -372,7 +372,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "タンバリン",
         choke_group: 0,
         default_pan: 0.62,
-        gain: 0.85,
+        gain: 0.73,
         model: DrumModelKind::ShakerScrape {
             hp_hz: 5600.0,
             bp_hz: 8400.0,
@@ -388,7 +388,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "スプラッシュシンバル",
         choke_group: 0,
         default_pan: 0.34,
-        gain: 0.84,
+        gain: 0.79,
         model: DrumModelKind::MetallicCymbal {
             base_hz: 495.0,
             hp_hz: 4800.0,
@@ -404,7 +404,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "カウベル",
         choke_group: 0,
         default_pan: 0.56,
-        gain: 0.92,
+        gain: 0.57,
         model: DrumModelKind::ModalDrum {
             base_hz: 540.0,
             modes: COWBELL_MODES,
@@ -419,7 +419,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "クラッシュシンバル2",
         choke_group: 0,
         default_pan: 0.70,
-        gain: 0.82,
+        gain: 0.96,
         model: DrumModelKind::MetallicCymbal {
             base_hz: 395.0,
             hp_hz: 4100.0,
@@ -435,7 +435,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "ヴィブラスラップ",
         choke_group: 0,
         default_pan: 0.42,
-        gain: 0.88,
+        gain: 0.61,
         model: DrumModelKind::Vibraslap {
             body_hz: 460.0,
             rattle_hz: 26.0,
@@ -464,7 +464,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "ハイ・ボンゴ",
         choke_group: 0,
         default_pan: 0.44,
-        gain: 0.98,
+        gain: 0.64,
         model: DrumModelKind::ModalDrum {
             base_hz: 340.0,
             modes: BONGO_MODES,
@@ -479,7 +479,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "ロー・ボンゴ",
         choke_group: 0,
         default_pan: 0.48,
-        gain: 1.0,
+        gain: 0.63,
         model: DrumModelKind::ModalDrum {
             base_hz: 235.0,
             modes: BONGO_MODES,
@@ -494,7 +494,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "ミュート・ハイコンガ",
         choke_group: 0,
         default_pan: 0.56,
-        gain: 1.0,
+        gain: 0.86,
         model: DrumModelKind::ModalDrum {
             base_hz: 285.0,
             modes: CONGA_MUTE_MODES,
@@ -509,7 +509,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "オープン・ハイコンガ",
         choke_group: 0,
         default_pan: 0.58,
-        gain: 1.0,
+        gain: 0.54,
         model: DrumModelKind::ModalDrum {
             base_hz: 265.0,
             modes: CONGA_OPEN_MODES,
@@ -524,7 +524,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "ロー・コンガ",
         choke_group: 0,
         default_pan: 0.62,
-        gain: 1.04,
+        gain: 0.54,
         model: DrumModelKind::ModalDrum {
             base_hz: 175.0,
             modes: CONGA_OPEN_MODES,
@@ -539,7 +539,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "ハイ・ティンバレス",
         choke_group: 0,
         default_pan: 0.40,
-        gain: 0.94,
+        gain: 0.55,
         model: DrumModelKind::ModalDrum {
             base_hz: 360.0,
             modes: TIMBALE_MODES,
@@ -554,7 +554,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "ロー・ティンバレス",
         choke_group: 0,
         default_pan: 0.44,
-        gain: 0.96,
+        gain: 0.54,
         model: DrumModelKind::ModalDrum {
             base_hz: 245.0,
             modes: TIMBALE_MODES,
@@ -569,7 +569,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "ハイ・アゴゴ",
         choke_group: 0,
         default_pan: 0.60,
-        gain: 0.92,
+        gain: 0.42,
         model: DrumModelKind::ModalDrum {
             base_hz: 1120.0,
             modes: DRUM_AGOGO_MODES,
@@ -584,7 +584,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "ロー・アゴゴ",
         choke_group: 0,
         default_pan: 0.64,
-        gain: 0.92,
+        gain: 0.46,
         model: DrumModelKind::ModalDrum {
             base_hz: 820.0,
             modes: DRUM_AGOGO_MODES,
@@ -599,7 +599,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "カバサ",
         choke_group: 0,
         default_pan: 0.38,
-        gain: 0.86,
+        gain: 0.65,
         model: DrumModelKind::ShakerScrape {
             hp_hz: 4500.0,
             bp_hz: 7200.0,
@@ -615,7 +615,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "マラカス",
         choke_group: 0,
         default_pan: 0.62,
-        gain: 0.86,
+        gain: 0.52,
         model: DrumModelKind::ShakerScrape {
             hp_hz: 5200.0,
             bp_hz: 7800.0,
@@ -631,7 +631,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "ショート・ホイッスル",
         choke_group: 2,
         default_pan: 0.50,
-        gain: 0.80,
+        gain: 0.29,
         model: DrumModelKind::WhistleCuica {
             f_start: 2780.0,
             f_end: 2920.0,
@@ -646,7 +646,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "ロング・ホイッスル",
         choke_group: 2,
         default_pan: 0.50,
-        gain: 0.80,
+        gain: 0.28,
         model: DrumModelKind::WhistleCuica {
             f_start: 2680.0,
             f_end: 2840.0,
@@ -661,7 +661,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "ショート・ギロ",
         choke_group: 3,
         default_pan: 0.42,
-        gain: 0.90,
+        gain: 0.60,
         model: DrumModelKind::ShakerScrape {
             hp_hz: 1800.0,
             bp_hz: 3100.0,
@@ -677,7 +677,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "ロング・ギロ",
         choke_group: 3,
         default_pan: 0.42,
-        gain: 0.90,
+        gain: 0.52,
         model: DrumModelKind::ShakerScrape {
             hp_hz: 1700.0,
             bp_hz: 2900.0,
@@ -693,7 +693,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "クラベス",
         choke_group: 0,
         default_pan: 0.54,
-        gain: 0.96,
+        gain: 0.76,
         model: DrumModelKind::ModalDrum {
             base_hz: 2480.0,
             modes: CLAVES_MODES,
@@ -708,7 +708,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "ハイ・ウッドブロック",
         choke_group: 0,
         default_pan: 0.46,
-        gain: 0.96,
+        gain: 0.75,
         model: DrumModelKind::ModalDrum {
             base_hz: 1050.0,
             modes: WOOD_MODES,
@@ -723,7 +723,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "ロー・ウッドブロック",
         choke_group: 0,
         default_pan: 0.52,
-        gain: 0.98,
+        gain: 0.78,
         model: DrumModelKind::ModalDrum {
             base_hz: 760.0,
             modes: WOOD_MODES,
@@ -738,7 +738,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "ミュート・クイーカ",
         choke_group: 0,
         default_pan: 0.56,
-        gain: 0.90,
+        gain: 0.44,
         model: DrumModelKind::WhistleCuica {
             f_start: 420.0,
             f_end: 690.0,
@@ -753,7 +753,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "オープン・クイーカ",
         choke_group: 0,
         default_pan: 0.56,
-        gain: 0.90,
+        gain: 0.44,
         model: DrumModelKind::WhistleCuica {
             f_start: 330.0,
             f_end: 560.0,
@@ -768,7 +768,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "ミュート・トライアングル",
         choke_group: 4,
         default_pan: 0.34,
-        gain: 0.84,
+        gain: 0.50,
         model: DrumModelKind::ModalDrum {
             base_hz: 1850.0,
             modes: TRIANGLE_MUTE_MODES,
@@ -783,7 +783,7 @@ pub const GM_DRUMS: [DrumPatch; 47] = [
         name_ja: "オープン・トライアングル",
         choke_group: 4,
         default_pan: 0.34,
-        gain: 0.84,
+        gain: 0.31,
         model: DrumModelKind::ModalDrum {
             base_hz: 1850.0,
             modes: TRIANGLE_OPEN_MODES,

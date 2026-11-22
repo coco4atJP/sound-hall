@@ -2,7 +2,7 @@ use crate::dsp::envelope::AdsrParams;
 use crate::dsp::filter::{FormantPreset, SvfMode};
 use crate::dsp::modal::ModeSpec;
 use crate::dsp::oscillator::Waveform;
-use crate::dsp::waveguide::WindType;
+use crate::dsp::waveguide::{WindType, WindVoicing};
 use crate::synth::patch::{
     BowedParams, FmAlgorithm, FmOperator, FmParams, GmFamily, ModalParams, PluckedParams,
     PresetMetadata, SubParams, SynthEngineKind, WindParams,
@@ -51,10 +51,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 80: Lead 1 (square)
     PresetMetadata {
         program: 80,
+        bank: 0,
         name_en: "Lead 1 (Square)",
         name_ja: "リード1 (スクエア)",
         family: GmFamily::SynthLead,
-        gain: 0.78,
+        gain: 2.27,
         default_reverb: 0.26,
         default_chorus: 0.22,
         pitch_range: (36, 96),
@@ -88,10 +89,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 81: Lead 2 (sawtooth)
     PresetMetadata {
         program: 81,
+        bank: 0,
         name_en: "Lead 2 (Sawtooth)",
         name_ja: "リード2 (ソウ)",
         family: GmFamily::SynthLead,
-        gain: 0.78,
+        gain: 3.06,
         default_reverb: 0.28,
         default_chorus: 0.30,
         pitch_range: (36, 96),
@@ -125,10 +127,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 82: Lead 3 (calliope)
     PresetMetadata {
         program: 82,
+        bank: 0,
         name_en: "Lead 3 (Calliope)",
         name_ja: "リード3 (カリオペ)",
         family: GmFamily::SynthLead,
-        gain: 0.85,
+        gain: 4.17,
         default_reverb: 0.34,
         default_chorus: 0.28,
         pitch_range: (48, 96),
@@ -162,10 +165,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 83: Lead 4 (chiff)
     PresetMetadata {
         program: 83,
+        bank: 0,
         name_en: "Lead 4 (Chiff)",
         name_ja: "リード4 (チフ)",
         family: GmFamily::SynthLead,
-        gain: 0.85,
+        gain: 1.70,
         default_reverb: 0.34,
         default_chorus: 0.25,
         pitch_range: (48, 96),
@@ -186,10 +190,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 84: Lead 5 (charang)
     PresetMetadata {
         program: 84,
+        bank: 0,
         name_en: "Lead 5 (Charang)",
         name_ja: "リード5 (チャラン)",
         family: GmFamily::SynthLead,
-        gain: 0.80,
+        gain: 4.98,
         default_reverb: 0.28,
         default_chorus: 0.28,
         pitch_range: (40, 96),
@@ -223,10 +228,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 85: Lead 6 (voice)
     PresetMetadata {
         program: 85,
+        bank: 0,
         name_en: "Lead 6 (Voice)",
         name_ja: "リード6 (ボイス)",
         family: GmFamily::SynthLead,
-        gain: 0.90,
+        gain: 10.91,
         default_reverb: 0.40,
         default_chorus: 0.35,
         pitch_range: (48, 92),
@@ -260,10 +266,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 86: Lead 7 (fifths)
     PresetMetadata {
         program: 86,
+        bank: 0,
         name_en: "Lead 7 (Fifths)",
         name_ja: "リード7 (フィフス)",
         family: GmFamily::SynthLead,
-        gain: 0.78,
+        gain: 3.56,
         default_reverb: 0.34,
         default_chorus: 0.30,
         pitch_range: (36, 92),
@@ -297,10 +304,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 87: Lead 8 (bass + lead)
     PresetMetadata {
         program: 87,
+        bank: 0,
         name_en: "Lead 8 (Bass + Lead)",
         name_ja: "リード8 (ベース+リード)",
         family: GmFamily::SynthLead,
-        gain: 0.82,
+        gain: 2.72,
         default_reverb: 0.22,
         default_chorus: 0.20,
         pitch_range: (28, 88),
@@ -334,10 +342,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 88: Pad 1 (new age)
     PresetMetadata {
         program: 88,
+        bank: 0,
         name_en: "Pad 1 (New Age)",
         name_ja: "パッド1 (ニューエイジ)",
         family: GmFamily::SynthPad,
-        gain: 0.86,
+        gain: 1.67,
         default_reverb: 0.52,
         default_chorus: 0.42,
         pitch_range: (36, 96),
@@ -358,10 +367,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 89: Pad 2 (warm)
     PresetMetadata {
         program: 89,
+        bank: 0,
         name_en: "Pad 2 (Warm)",
         name_ja: "パッド2 (ウォーム)",
         family: GmFamily::SynthPad,
-        gain: 0.78,
+        gain: 3.05,
         default_reverb: 0.48,
         default_chorus: 0.48,
         pitch_range: (36, 92),
@@ -395,10 +405,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 90: Pad 3 (polysynth)
     PresetMetadata {
         program: 90,
+        bank: 0,
         name_en: "Pad 3 (Polysynth)",
         name_ja: "パッド3 (ポリシンセ)",
         family: GmFamily::SynthPad,
-        gain: 0.78,
+        gain: 2.39,
         default_reverb: 0.44,
         default_chorus: 0.52,
         pitch_range: (36, 96),
@@ -432,10 +443,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 91: Pad 4 (choir)
     PresetMetadata {
         program: 91,
+        bank: 0,
         name_en: "Pad 4 (Choir)",
         name_ja: "パッド4 (クワイア)",
         family: GmFamily::SynthPad,
-        gain: 0.90,
+        gain: 7.32,
         default_reverb: 0.58,
         default_chorus: 0.45,
         pitch_range: (45, 88),
@@ -469,10 +481,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 92: Pad 5 (bowed)
     PresetMetadata {
         program: 92,
+        bank: 0,
         name_en: "Pad 5 (Bowed)",
         name_ja: "パッド5 (ボウイング・グラス)",
         family: GmFamily::SynthPad,
-        gain: 0.88,
+        gain: 1.37,
         default_reverb: 0.56,
         default_chorus: 0.32,
         pitch_range: (48, 96),
@@ -493,10 +506,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 93: Pad 6 (metallic)
     PresetMetadata {
         program: 93,
+        bank: 0,
         name_en: "Pad 6 (Metallic)",
         name_ja: "パッド6 (メタリック)",
         family: GmFamily::SynthPad,
-        gain: 0.86,
+        gain: 1.22,
         default_reverb: 0.54,
         default_chorus: 0.38,
         pitch_range: (36, 96),
@@ -517,10 +531,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 94: Pad 7 (halo)
     PresetMetadata {
         program: 94,
+        bank: 0,
         name_en: "Pad 7 (Halo)",
         name_ja: "パッド7 (ハロー)",
         family: GmFamily::SynthPad,
-        gain: 0.86,
+        gain: 6.81,
         default_reverb: 0.62,
         default_chorus: 0.55,
         pitch_range: (48, 96),
@@ -554,10 +569,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 95: Pad 8 (sweep)
     PresetMetadata {
         program: 95,
+        bank: 0,
         name_en: "Pad 8 (Sweep)",
         name_ja: "パッド8 (スウィープ)",
         family: GmFamily::SynthPad,
-        gain: 0.78,
+        gain: 1.48,
         default_reverb: 0.52,
         default_chorus: 0.45,
         pitch_range: (36, 92),
@@ -591,10 +607,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 96: FX 1 (rain)
     PresetMetadata {
         program: 96,
+        bank: 0,
         name_en: "FX 1 (Rain)",
         name_ja: "FX 1 (レイン)",
         family: GmFamily::SynthEffects,
-        gain: 0.86,
+        gain: 2.01,
         default_reverb: 0.60,
         default_chorus: 0.45,
         pitch_range: (48, 108),
@@ -615,10 +632,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 97: FX 2 (soundtrack)
     PresetMetadata {
         program: 97,
+        bank: 0,
         name_en: "FX 2 (Soundtrack)",
         name_ja: "FX 2 (サウンドトラック)",
         family: GmFamily::SynthEffects,
-        gain: 0.82,
+        gain: 2.52,
         default_reverb: 0.58,
         default_chorus: 0.50,
         pitch_range: (36, 92),
@@ -652,10 +670,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 98: FX 3 (crystal)
     PresetMetadata {
         program: 98,
+        bank: 0,
         name_en: "FX 3 (Crystal)",
         name_ja: "FX 3 (クリスタル)",
         family: GmFamily::SynthEffects,
-        gain: 0.88,
+        gain: 2.16,
         default_reverb: 0.54,
         default_chorus: 0.38,
         pitch_range: (48, 108),
@@ -676,10 +695,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 99: FX 4 (atmosphere)
     PresetMetadata {
         program: 99,
+        bank: 0,
         name_en: "FX 4 (Atmosphere)",
         name_ja: "FX 4 (アトモスフィア)",
         family: GmFamily::SynthEffects,
-        gain: 0.86,
+        gain: 1.23,
         default_reverb: 0.58,
         default_chorus: 0.45,
         pitch_range: (36, 96),
@@ -700,10 +720,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 100: FX 5 (brightness)
     PresetMetadata {
         program: 100,
+        bank: 0,
         name_en: "FX 5 (Brightness)",
         name_ja: "FX 5 (ブライトネス)",
         family: GmFamily::SynthEffects,
-        gain: 0.84,
+        gain: 2.02,
         default_reverb: 0.52,
         default_chorus: 0.42,
         pitch_range: (48, 108),
@@ -724,10 +745,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 101: FX 6 (goblins)
     PresetMetadata {
         program: 101,
+        bank: 0,
         name_en: "FX 6 (Goblins)",
         name_ja: "FX 6 (ゴブリン)",
         family: GmFamily::SynthEffects,
-        gain: 0.82,
+        gain: 6.32,
         default_reverb: 0.56,
         default_chorus: 0.48,
         pitch_range: (36, 92),
@@ -761,10 +783,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 102: FX 7 (echoes)
     PresetMetadata {
         program: 102,
+        bank: 0,
         name_en: "FX 7 (Echoes)",
         name_ja: "FX 7 (エコー)",
         family: GmFamily::SynthEffects,
-        gain: 0.82,
+        gain: 2.41,
         default_reverb: 0.68,
         default_chorus: 0.52,
         pitch_range: (36, 96),
@@ -798,10 +821,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 103: FX 8 (sci-fi)
     PresetMetadata {
         program: 103,
+        bank: 0,
         name_en: "FX 8 (Sci-Fi)",
         name_ja: "FX 8 (サイファイ / SF)",
         family: GmFamily::SynthEffects,
-        gain: 0.82,
+        gain: 1.91,
         default_reverb: 0.52,
         default_chorus: 0.40,
         pitch_range: (36, 96),
@@ -835,10 +859,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 104: Sitar
     PresetMetadata {
         program: 104,
+        bank: 0,
         name_en: "Sitar",
         name_ja: "シタール",
         family: GmFamily::Ethnic,
-        gain: 0.96,
+        gain: 5.07,
         default_reverb: 0.36,
         default_chorus: 0.08,
         pitch_range: (48, 84),
@@ -861,10 +886,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 105: Banjo
     PresetMetadata {
         program: 105,
+        bank: 0,
         name_en: "Banjo",
         name_ja: "バンジョー",
         family: GmFamily::Ethnic,
-        gain: 1.0,
+        gain: 4.79,
         default_reverb: 0.24,
         default_chorus: 0.0,
         pitch_range: (48, 88),
@@ -887,10 +913,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 106: Shamisen
     PresetMetadata {
         program: 106,
+        bank: 0,
         name_en: "Shamisen",
         name_ja: "三味線",
         family: GmFamily::Ethnic,
-        gain: 1.04,
+        gain: 5.13,
         default_reverb: 0.26,
         default_chorus: 0.0,
         pitch_range: (48, 84),
@@ -913,10 +940,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 107: Koto
     PresetMetadata {
         program: 107,
+        bank: 0,
         name_en: "Koto",
         name_ja: "箏 (琴)",
         family: GmFamily::Ethnic,
-        gain: 1.02,
+        gain: 4.23,
         default_reverb: 0.36,
         default_chorus: 0.0,
         pitch_range: (45, 88),
@@ -939,10 +967,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 108: Kalimba
     PresetMetadata {
         program: 108,
+        bank: 0,
         name_en: "Kalimba",
         name_ja: "カリンバ (親指ピアノ)",
         family: GmFamily::Ethnic,
-        gain: 1.0,
+        gain: 2.40,
         default_reverb: 0.32,
         default_chorus: 0.0,
         pitch_range: (55, 88),
@@ -959,10 +988,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 109: Bagpipe
     PresetMetadata {
         program: 109,
+        bank: 0,
         name_en: "Bagpipe",
         name_ja: "バグパイプ",
         family: GmFamily::Ethnic,
-        gain: 0.88,
+        gain: 6.26,
         default_reverb: 0.38,
         default_chorus: 0.08,
         pitch_range: (55, 84),
@@ -979,15 +1009,22 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
             vibrato_rate: 4.5,
             vibrato_depth_cents: 4.0,
             drone_fifth: true,
+            voicing: WindVoicing::new(
+                2600.0,
+                0.2,
+                300.0,
+                [(1300.0, 2.0, 6.0), (3000.0, 3.0, 4.0), (0.0, 1.0, 0.0)],
+            ),
         }),
     },
     // 110: Fiddle
     PresetMetadata {
         program: 110,
+        bank: 0,
         name_en: "Fiddle",
         name_ja: "フィドル",
         family: GmFamily::Ethnic,
-        gain: 0.94,
+        gain: 5.94,
         default_reverb: 0.30,
         default_chorus: 0.0,
         pitch_range: (55, 96),
@@ -996,9 +1033,7 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
             brightness: 0.86,
             rosin_noise: 0.12,
             ensemble_detune: 0.0,
-            body_specs: [(300.0, 3.4, 0.32), (560.0, 4.0, 0.34), (2650.0, 2.8, 0.26)],
-            body_dry: 0.64,
-            body_wet: 0.42,
+            body_scale: 1.00,
             adsr: AdsrParams::new(0.032, 0.10, 0.88, 0.10),
             vibrato_rate: 6.2,
             vibrato_depth_cents: 15.0,
@@ -1008,10 +1043,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 111: Shanai
     PresetMetadata {
         program: 111,
+        bank: 0,
         name_en: "Shanai",
         name_ja: "シャナイ (チャルメラ)",
         family: GmFamily::Ethnic,
-        gain: 0.92,
+        gain: 6.61,
         default_reverb: 0.34,
         default_chorus: 0.0,
         pitch_range: (55, 88),
@@ -1032,15 +1068,22 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
             vibrato_rate: 5.8,
             vibrato_depth_cents: 16.0,
             drone_fifth: false,
+            voicing: WindVoicing::new(
+                2600.0,
+                0.4,
+                300.0,
+                [(1200.0, 2.0, 7.0), (2800.0, 3.0, 5.0), (0.0, 1.0, 0.0)],
+            ),
         }),
     },
     // 112: Tinkle Bell
     PresetMetadata {
         program: 112,
+        bank: 0,
         name_en: "Tinkle Bell",
         name_ja: "ティンクルベル",
         family: GmFamily::Percussive,
-        gain: 0.88,
+        gain: 2.46,
         default_reverb: 0.42,
         default_chorus: 0.0,
         pitch_range: (60, 108),
@@ -1057,10 +1100,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 113: Agogo
     PresetMetadata {
         program: 113,
+        bank: 0,
         name_en: "Agogo",
         name_ja: "アゴゴ",
         family: GmFamily::Percussive,
-        gain: 0.96,
+        gain: 2.38,
         default_reverb: 0.25,
         default_chorus: 0.0,
         pitch_range: (48, 96),
@@ -1077,10 +1121,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 114: Steel Drums
     PresetMetadata {
         program: 114,
+        bank: 0,
         name_en: "Steel Drums",
         name_ja: "スティールドラム (スティールパン)",
         family: GmFamily::Percussive,
-        gain: 0.98,
+        gain: 2.31,
         default_reverb: 0.34,
         default_chorus: 0.08,
         pitch_range: (52, 88),
@@ -1097,10 +1142,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 115: Woodblock
     PresetMetadata {
         program: 115,
+        bank: 0,
         name_en: "Woodblock",
         name_ja: "ウッドブロック",
         family: GmFamily::Percussive,
-        gain: 1.05,
+        gain: 3.59,
         default_reverb: 0.20,
         default_chorus: 0.0,
         pitch_range: (48, 96),
@@ -1117,10 +1163,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 116: Taiko Drum
     PresetMetadata {
         program: 116,
+        bank: 0,
         name_en: "Taiko Drum",
         name_ja: "和太鼓 (太鼓)",
         family: GmFamily::Percussive,
-        gain: 1.20,
+        gain: 2.29,
         default_reverb: 0.36,
         default_chorus: 0.0,
         pitch_range: (24, 64),
@@ -1137,10 +1184,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 117: Melodic Tom
     PresetMetadata {
         program: 117,
+        bank: 0,
         name_en: "Melodic Tom",
         name_ja: "メロディック・タム",
         family: GmFamily::Percussive,
-        gain: 0.96,
+        gain: 6.74,
         default_reverb: 0.28,
         default_chorus: 0.0,
         pitch_range: (36, 72),
@@ -1174,10 +1222,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 118: Synth Drum
     PresetMetadata {
         program: 118,
+        bank: 0,
         name_en: "Synth Drum",
         name_ja: "シンセ・ドラム",
         family: GmFamily::Percussive,
-        gain: 0.96,
+        gain: 6.99,
         default_reverb: 0.24,
         default_chorus: 0.0,
         pitch_range: (36, 72),
@@ -1211,10 +1260,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 119: Reverse Cymbal
     PresetMetadata {
         program: 119,
+        bank: 0,
         name_en: "Reverse Cymbal",
         name_ja: "リバース・シンバル",
         family: GmFamily::Percussive,
-        gain: 0.86,
+        gain: 2.72,
         default_reverb: 0.45,
         default_chorus: 0.25,
         pitch_range: (36, 96),
@@ -1248,10 +1298,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 120: Guitar Fret Noise
     PresetMetadata {
         program: 120,
+        bank: 0,
         name_en: "Guitar Fret Noise",
         name_ja: "ギター・フレットノイズ",
         family: GmFamily::SoundEffects,
-        gain: 0.92,
+        gain: 17.91,
         default_reverb: 0.22,
         default_chorus: 0.0,
         pitch_range: (36, 84),
@@ -1285,10 +1336,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 121: Breath Noise
     PresetMetadata {
         program: 121,
+        bank: 0,
         name_en: "Breath Noise",
         name_ja: "ブレスノイズ",
         family: GmFamily::SoundEffects,
-        gain: 0.88,
+        gain: 23.57,
         default_reverb: 0.35,
         default_chorus: 0.10,
         pitch_range: (36, 84),
@@ -1322,10 +1374,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 122: Seashore
     PresetMetadata {
         program: 122,
+        bank: 0,
         name_en: "Seashore",
         name_ja: "波の音 (シーショア)",
         family: GmFamily::SoundEffects,
-        gain: 0.85,
+        gain: 10.66,
         default_reverb: 0.50,
         default_chorus: 0.30,
         pitch_range: (36, 84),
@@ -1359,10 +1412,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 123: Bird Tweet
     PresetMetadata {
         program: 123,
+        bank: 0,
         name_en: "Bird Tweet",
         name_ja: "鳥のさえずり",
         family: GmFamily::SoundEffects,
-        gain: 0.86,
+        gain: 41.67,
         default_reverb: 0.42,
         default_chorus: 0.0,
         pitch_range: (60, 108),
@@ -1396,10 +1450,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 124: Telephone Ring
     PresetMetadata {
         program: 124,
+        bank: 0,
         name_en: "Telephone Ring",
         name_ja: "電話のベル",
         family: GmFamily::SoundEffects,
-        gain: 0.84,
+        gain: 1.49,
         default_reverb: 0.28,
         default_chorus: 0.0,
         pitch_range: (48, 96),
@@ -1420,10 +1475,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 125: Helicopter
     PresetMetadata {
         program: 125,
+        bank: 0,
         name_en: "Helicopter",
         name_ja: "ヘリコプター",
         family: GmFamily::SoundEffects,
-        gain: 0.88,
+        gain: 2.68,
         default_reverb: 0.25,
         default_chorus: 0.15,
         pitch_range: (24, 60),
@@ -1457,10 +1513,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 126: Applause
     PresetMetadata {
         program: 126,
+        bank: 0,
         name_en: "Applause",
         name_ja: "拍手 (アプローズ)",
         family: GmFamily::SoundEffects,
-        gain: 0.86,
+        gain: 6.74,
         default_reverb: 0.54,
         default_chorus: 0.40,
         pitch_range: (36, 84),
@@ -1494,10 +1551,11 @@ pub const PRESETS_80_127: [PresetMetadata; 48] = [
     // 127: Gunshot
     PresetMetadata {
         program: 127,
+        bank: 0,
         name_en: "Gunshot",
         name_ja: "銃声 (ガンショット)",
         family: GmFamily::SoundEffects,
-        gain: 1.0,
+        gain: 5.27,
         default_reverb: 0.46,
         default_chorus: 0.0,
         pitch_range: (24, 72),

@@ -51,6 +51,27 @@ fn measure_fundamental_hz(mono: &[f32], sr: f32, expected_hz: f32) -> f32 {
             best_f = f;
         }
     }
+
+    // Real instruments (oboe, bassoon, low brass) often radiate a fundamental weaker than
+    // their 2nd/3rd partial. If the strongest peak is such a partial of the expected pitch,
+    // accept the expected fundamental only when it is genuinely present (> -16 dB) — a true
+    // octave error (missing fundamental) still fails.
+    let mag_at = |f: f32| {
+        let w = TAU * f / sr;
+        let (mut re, mut im) = (0.0_f32, 0.0_f32);
+        for (k, &x) in slice.iter().enumerate() {
+            let win = 0.5 * (1.0 - (TAU * k as f32 / n).cos());
+            re += x * win * (w * k as f32).cos();
+            im -= x * win * (w * k as f32).sin();
+        }
+        re * re + im * im
+    };
+    for k in [2.0_f32, 3.0] {
+        let cand = best_f / k;
+        if ((cand - expected_hz) / expected_hz).abs() < 0.03 && mag_at(cand) > best_mag * 0.025 {
+            return cand;
+        }
+    }
     best_f
 }
 
@@ -508,4 +529,332 @@ fn audit_wav_validation_rejects_invalid_params() {
     assert_eq!(err.kind(), ErrorKind::InvalidInput);
     let err = write_wav_f32(&mut out, 44100, 0, &[]).unwrap_err();
     assert_eq!(err.kind(), ErrorKind::InvalidInput);
+}
+
+/// Renders one dry note (no reverb/chorus) and returns interleaved stereo samples.
+fn render_dry_note(program: u8, note: u8, velocity: u8, secs: f32) -> Vec<f32> {
+    let sr = 44100.0_f32;
+    let mut engine = SoundHallEngine::new(sr);
+    engine.set_reverb_mix(0.0);
+    engine.set_chorus_mix(0.0);
+    engine.program_change(0, program);
+    engine.note_on(0, note, velocity);
+    let mut buf = vec![0.0_f32; (secs * sr) as usize * 2];
+    engine.render_stereo(&mut buf);
+    buf
+}
+
+/// Loudest 100 ms RMS window (dB) — a short-term loudness proxy fair to both
+/// percussive and sustained sounds.
+fn short_term_db(samples: &[f32]) -> f32 {
+    let win = 4410 * 2;
+    let hop = win / 4;
+    let mut best = 0.0_f32;
+    let mut i = 0;
+    while i + win <= samples.len() {
+        best = best.max(rms(&samples[i..i + win]));
+        i += hop;
+    }
+    20.0 * best.max(1e-9).log10()
+}
+
+fn representative_pitch(program: u8) -> u8 {
+    let (lo, hi) = get_preset(program).pitch_range;
+    if (lo..=hi).contains(&60) {
+        60
+    } else {
+        ((lo as u16 + hi as u16) / 2) as u8
+    }
+}
+
+#[test]
+fn verify_preset_loudness_is_balanced() {
+    let levels: Vec<(u8, f32)> = (0..128u8)
+        .map(|p| {
+            let buf = render_dry_note(p, representative_pitch(p), 100, 0.6);
+            (p, short_term_db(&buf))
+        })
+        .collect();
+    let mut sorted: Vec<f32> = levels.iter().map(|&(_, l)| l).collect();
+    sorted.sort_by(f32::total_cmp);
+    let median = sorted[sorted.len() / 2];
+    for (p, l) in levels {
+        assert!(
+            (l - median).abs() < 8.0,
+            "GM #{p} {} is {:+.1} dB from the preset median (unbalanced)",
+            get_preset(p).name_en,
+            l - median
+        );
+    }
+}
+
+#[test]
+fn verify_strings_are_dc_free_and_sustain() {
+    // Piano, nylon guitar, finger bass, harp, koto
+    for &program in &[0u8, 24, 33, 46, 107] {
+        let note = representative_pitch(program);
+        let buf = render_dry_note(program, note, 100, 2.0);
+        let mono: Vec<f32> = buf.chunks(2).map(|f| 0.5 * (f[0] + f[1])).collect();
+        let first = &mono[..44100];
+        let mean = first.iter().sum::<f32>() / first.len() as f32;
+        assert!(
+            mean.abs() < 0.02 * rms(first),
+            "GM #{program} has a DC offset: mean={mean} rms={}",
+            rms(first)
+        );
+        // A held plucked/struck string must still ring after one second
+        let early = rms(&mono[2205..6615]);
+        let late = rms(&mono[44100..48510]);
+        assert!(
+            late > early * 0.03,
+            "GM #{program} decays too fast: early={early} late={late}"
+        );
+    }
+}
+
+#[test]
+fn verify_velocity_shapes_loudness_and_timbre() {
+    // Piano, nylon guitar, vibraphone, strings, trumpet, flute, saw lead, organ
+    for &program in &[0u8, 24, 11, 48, 56, 73, 81, 16] {
+        let note = representative_pitch(program);
+        let soft = short_term_db(&render_dry_note(program, note, 30, 0.6));
+        let loud = short_term_db(&render_dry_note(program, note, 127, 0.6));
+        assert!(
+            loud - soft > 7.5,
+            "GM #{program} velocity range too flat: {:.1} dB",
+            loud - soft
+        );
+    }
+
+    // Harder piano strikes must be brighter: ratio of high-passed (first-difference)
+    // energy to total energy rises with velocity.
+    let brightness = |vel: u8| {
+        let buf = render_dry_note(0, 60, vel, 0.3);
+        let mono: Vec<f32> = buf.chunks(2).map(|f| 0.5 * (f[0] + f[1])).collect();
+        let diff: Vec<f32> = mono.windows(2).map(|w| w[1] - w[0]).collect();
+        rms(&diff) / rms(&mono).max(1e-9)
+    };
+    let (pp, ff) = (brightness(30), brightness(127));
+    assert!(
+        ff > pp * 1.3,
+        "piano timbre should brighten with velocity: pp={pp} ff={ff}"
+    );
+}
+
+#[test]
+fn verify_master_limiter_keeps_dense_mix_clean() {
+    let sr = 44100.0_f32;
+    let mut engine = SoundHallEngine::new(sr);
+    engine.set_master_gain(2.5);
+    for ch in 0..8u8 {
+        engine.program_change(ch, [0u8, 48, 61, 81, 89, 19, 33, 56][ch as usize]);
+        for n in [48u8, 55, 60, 64, 67] {
+            engine.note_on(ch, n, 127);
+        }
+    }
+    let mut buf = vec![0.0_f32; (1.0 * sr) as usize * 2];
+    engine.render_stereo(&mut buf);
+    assert!(buf.iter().all(|s| s.is_finite()));
+    assert!(
+        peak(&buf) <= 0.95,
+        "limiter ceiling exceeded: {}",
+        peak(&buf)
+    );
+    assert!(engine.limiter_gain() < 1.0, "limiter should be engaged");
+    let mean_l = buf.iter().step_by(2).sum::<f32>() / (buf.len() / 2) as f32;
+    assert!(mean_l.abs() < 0.01, "master output carries DC: {mean_l}");
+}
+
+/// Windowed DFT magnitude² of `mono` at `f` Hz.
+fn dft_mag(mono: &[f32], sr: f32, f: f32) -> f32 {
+    let n = mono.len() as f32;
+    let w = TAU * f / sr;
+    let (mut re, mut im) = (0.0_f32, 0.0_f32);
+    for (k, &x) in mono.iter().enumerate() {
+        let win = 0.5 * (1.0 - (TAU * k as f32 / n).cos());
+        re += x * win * (w * k as f32).cos();
+        im -= x * win * (w * k as f32).sin();
+    }
+    re * re + im * im
+}
+
+/// Frequency of the strongest spectral peak within `center * (1 +- span)`.
+fn peak_near(mono: &[f32], sr: f32, center: f32, span: f32) -> f32 {
+    let steps = 240;
+    let (lo, hi) = (center * (1.0 - span), center * (1.0 + span));
+    (0..=steps)
+        .map(|i| lo + (hi - lo) * i as f32 / steps as f32)
+        .map(|f| (f, dft_mag(mono, sr, f)))
+        .fold(
+            (center, -1.0),
+            |best, cur| if cur.1 > best.1 { cur } else { best },
+        )
+        .0
+}
+
+/// Power-weighted "effective frequency" of a signal from its first-difference energy
+/// (equals f for a pure sine): a cheap spectral-brightness measure.
+fn effective_hz(mono: &[f32], sr: f32) -> f32 {
+    let diff: Vec<f32> = mono.windows(2).map(|w| w[1] - w[0]).collect();
+    let ratio = (rms(&diff) / rms(mono).max(1e-9)).min(1.99);
+    (ratio * 0.5).asin() * sr / core::f32::consts::PI
+}
+
+fn mono_of(buf: &[f32]) -> Vec<f32> {
+    buf.chunks(2).map(|f| 0.5 * (f[0] + f[1])).collect()
+}
+
+#[test]
+fn verify_piano_strings_are_inharmonic_like_a_real_grand() {
+    let sr = 44100.0_f32;
+    let stretch_cents = |note: u8, partial: f32| {
+        let mono = mono_of(&render_dry_note(0, note, 100, 1.6));
+        let seg = &mono[(0.1 * sr) as usize..(1.5 * sr) as usize];
+        let f0 = 440.0 * 2.0_f32.powf((note as f32 - 69.0) / 12.0);
+        let f1 = peak_near(seg, sr, f0, 0.02);
+        let fp = peak_near(seg, sr, f0 * partial, 0.03);
+        1200.0 * (fp / (partial * f1)).log2()
+    };
+    // Stiff steel strings: upper partials run sharp, more so in the treble
+    let mid = stretch_cents(60, 8.0);
+    let treble = stretch_cents(84, 4.0);
+    assert!(
+        mid > 4.0 && mid < 40.0,
+        "C4 partial 8 stretch {mid:.1} cents"
+    );
+    assert!(treble > mid * 0.8, "C6 partial 4 stretch {treble:.1} cents");
+}
+
+#[test]
+fn verify_orchestral_spectra_are_rich_and_dynamic() {
+    let sr = 44100.0_f32;
+    let steady = |program: u8, note: u8, vel: u8| {
+        let mono = mono_of(&render_dry_note(program, note, vel, 1.0));
+        mono[(0.45 * sr) as usize..(0.95 * sr) as usize].to_vec()
+    };
+    let hz = |note: u8| 440.0 * 2.0_f32.powf((note as f32 - 69.0) / 12.0);
+
+    // Bowed strings and brass radiate strong upper partials (not a near-sine)
+    for &(program, note) in &[(40u8, 67u8), (56, 67), (65, 61), (68, 67)] {
+        let eff = effective_hz(&steady(program, note, 100), sr);
+        assert!(
+            eff > 2.0 * hz(note),
+            "GM #{program} too dull: effective {eff:.0} Hz vs f0 {:.0} Hz",
+            hz(note)
+        );
+    }
+
+    // Brass blares and strings brighten when played harder
+    for &program in &[56u8, 40] {
+        let soft = effective_hz(&steady(program, 67, 40), sr);
+        let loud = effective_hz(&steady(program, 67, 127), sr);
+        assert!(
+            loud > soft * 1.08,
+            "GM #{program} should brighten with dynamics: pp={soft:.0} ff={loud:.0}"
+        );
+    }
+
+    // Clarinet (cylindrical bore): 3rd partial far stronger than the 2nd in the low register
+    let clar = steady(71, 55, 100);
+    let h2 = dft_mag(&clar, sr, 2.0 * hz(55));
+    let h3 = dft_mag(&clar, sr, 3.0 * hz(55));
+    assert!(
+        h3 > h2 * 10.0,
+        "clarinet should be odd-harmonic: h2={h2} h3={h3}"
+    );
+}
+
+#[test]
+fn verify_wagakki_bank_select_and_voices() {
+    use sound_hall_core::{bank_presets, wagakki_presets, MidiEvent, WAGAKKI_BANK};
+    let sr = 44100.0_f32;
+
+    // Every 和楽器 voice renders cleanly, audibly and balanced against the GM median
+    let gm_median = {
+        let mut v: Vec<f32> = [0u8, 24, 40, 56, 73, 116]
+            .iter()
+            .map(|&p| short_term_db(&render_dry_note(p, representative_pitch(p), 100, 0.6)))
+            .collect();
+        v.sort_by(f32::total_cmp);
+        v[v.len() / 2]
+    };
+    for preset in wagakki_presets() {
+        let (lo, hi) = preset.pitch_range;
+        let note = ((lo as u16 + hi as u16) / 2) as u8;
+        let mut engine = SoundHallEngine::new(sr);
+        engine.set_reverb_mix(0.0);
+        engine.set_chorus_mix(0.0);
+        engine.select_bank_program(0, WAGAKKI_BANK, preset.program);
+        engine.note_on(0, note, 100);
+        let mut buf = vec![0.0_f32; (0.6 * sr) as usize * 2];
+        engine.render_stereo(&mut buf);
+        assert!(buf.iter().all(|s| s.is_finite()), "{} NaN", preset.name_en);
+        assert!(peak(&buf) <= 1.0001, "{} clipped", preset.name_en);
+        let level = short_term_db(&buf);
+        assert!(
+            (level - gm_median).abs() < 8.0,
+            "和楽器 {} ({}) is {:+.1} dB from the GM median",
+            preset.name_ja,
+            preset.name_en,
+            level - gm_median
+        );
+    }
+
+    // Bank select really switches the voice: same program, different bank, different sound
+    let render_bank = |bank: u8| {
+        let mut engine = SoundHallEngine::new(sr);
+        engine.set_reverb_mix(0.0);
+        engine.select_bank_program(0, bank, 9);
+        engine.note_on(0, 69, 100);
+        let mut buf = vec![0.0_f32; 8192 * 2];
+        engine.render_stereo(&mut buf);
+        buf
+    };
+    let gm_glock = render_bank(0); // GM #9 Glockenspiel
+    let hichiriki = render_bank(WAGAKKI_BANK); // 和楽器 #9 篳篥
+    let diff: f32 = gm_glock
+        .iter()
+        .zip(&hichiriki)
+        .map(|(a, b)| (a - b).abs())
+        .sum();
+    assert!(diff > 1.0, "bank select must change the instrument");
+    assert_eq!(bank_presets(WAGAKKI_BANK)[9].name_ja, "篳篥");
+
+    // Pitched 和楽器 are in tune (篠笛, 篳篥, 笙, 琵琶, 胡弓)
+    for &(prog, note) in &[(6u8, 79u8), (9, 69), (10, 76), (0, 52), (5, 69)] {
+        let mut engine = SoundHallEngine::new(sr);
+        engine.set_reverb_mix(0.0);
+        engine.set_chorus_mix(0.0);
+        engine.select_bank_program(0, WAGAKKI_BANK, prog);
+        engine.note_on(0, note, 100);
+        let mut buf = vec![0.0_f32; (0.9 * sr) as usize * 2];
+        engine.render_stereo(&mut buf);
+        let mono = mono_of(&buf);
+        let expected = 440.0 * 2.0_f32.powf((note as f32 - 69.0) / 12.0);
+        let measured = measure_fundamental_hz(&mono[(0.35 * sr) as usize..], sr, expected);
+        assert!(
+            ((measured - expected) / expected).abs() < 0.03,
+            "和楽器 #{prog} at MIDI {note}: measured {measured:.1} Hz, expected {expected:.1} Hz"
+        );
+    }
+
+    // Scores select the bank by instrument name
+    let song = parse_score("track Fue program=龍笛\no5 c4\n").unwrap();
+    let has_bank = song.events.iter().any(|e| {
+        matches!(
+            e.event,
+            MidiEvent::ControlChange {
+                cc: 0,
+                value: 1,
+                ..
+            }
+        )
+    });
+    assert!(has_bank, "program=龍笛 must emit Bank Select 1");
+    for id in ["matsuri", "gagaku"] {
+        let song = parse_demo(id).unwrap();
+        let mut engine = SoundHallEngine::new(sr);
+        let audio = MidiSequencer::render_to_buffer(&song, &mut engine, 1.0);
+        assert!(audio.iter().all(|s| s.is_finite()) && rms(&audio) > 0.01);
+    }
 }

@@ -1,8 +1,8 @@
 use std::f32::consts::PI;
 
 use crate::dsp::envelope::{Adsr, AdsrParams, Lfo};
-use crate::dsp::filter::{FormantBank, OnePoleLp, SvfFilter, SvfMode};
-use crate::dsp::math::{flush_denormal, midi_to_hz, soft_clip, Rng};
+use crate::dsp::filter::{BodyResonator, FormantBank, OnePoleLp, StereoSvf, SvfFilter, SvfMode};
+use crate::dsp::math::{flush_denormal, midi_to_hz, soft_limit, Rng};
 use crate::dsp::modal::ModalBank;
 use crate::dsp::oscillator::{PolyBlepOsc, Waveform};
 use crate::dsp::waveguide::{BowedStringModel, PluckedStringModel, WindBoreModel};
@@ -13,6 +13,70 @@ use super::patch::{
 };
 
 const DRAWBAR_RATIOS: [f32; 9] = [0.5, 1.5, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 8.0];
+
+/// Inharmonicity coefficient `B` of a grand piano string at MIDI `note`.
+///
+/// Follows the measured U-shaped curve of concert grands: lowest around the bass/tenor
+/// break (~1e-4), ~2.5e-4 at middle C, rising steeply into the treble (~1e-2 at the top),
+/// with the stiff wound strings of the lowest octave slightly higher again.
+fn piano_inharmonicity(note: f32) -> f32 {
+    const LOG10_B: [(f32, f32); 9] = [
+        (21.0, -3.50),
+        (33.0, -3.85),
+        (45.0, -3.95),
+        (60.0, -3.60),
+        (72.0, -3.25),
+        (80.0, -3.00),
+        (90.0, -2.50),
+        (100.0, -2.00),
+        (108.0, -1.75),
+    ];
+    let n = note.clamp(LOG10_B[0].0, LOG10_B[LOG10_B.len() - 1].0);
+    let mut lg = LOG10_B[0].1;
+    for w in LOG10_B.windows(2) {
+        let ((x0, y0), (x1, y1)) = (w[0], w[1]);
+        if n >= x0 && n <= x1 {
+            lg = y0 + (y1 - y0) * (n - x0) / (x1 - x0);
+            break;
+        }
+    }
+    10.0_f32.powf(lg)
+}
+
+/// Per-engine raw output trim keeping ~90 % of presets inside the voice limiter's linear
+/// range (|x| < 0.75) even at velocity 127, so loud notes keep their dynamics and timbre
+/// instead of being flattened by saturation. Preset `gain` restores the loudness.
+fn raw_output_trim(patch: &SynthEngineKind) -> f32 {
+    match patch {
+        SynthEngineKind::HammeredString(_) => 0.6,
+        SynthEngineKind::PluckedString(_) => 1.0,
+        SynthEngineKind::ModalPercussion(_) => 0.42,
+        SynthEngineKind::Fm4Op(_) => 0.8,
+        SynthEngineKind::AdditiveOrgan(_) => 0.5,
+        SynthEngineKind::FormantSubtractive(_) => 0.2,
+        SynthEngineKind::BowedString(_) => 0.85,
+        SynthEngineKind::WindBore(_) => 0.73,
+    }
+}
+
+/// Velocity at which presets are loudness-calibrated (MIDI 100).
+pub(crate) const VELOCITY_REF: f32 = 100.0 / 127.0;
+
+/// Extra velocity→gain exponent per engine, on top of each model's own physical velocity
+/// response, so that pp→ff spans a musical range (~19–20 dB struck/plucked, ~14–15 dB
+/// bowed/blown, ~9 dB organ) instead of the flat 4–6 dB the sustained models give alone.
+fn velocity_exponent(patch: &SynthEngineKind) -> f32 {
+    match patch {
+        SynthEngineKind::HammeredString(_) => 0.37,
+        SynthEngineKind::PluckedString(_) => 0.38,
+        SynthEngineKind::ModalPercussion(_) => 0.58,
+        SynthEngineKind::Fm4Op(_) => 0.22,
+        SynthEngineKind::AdditiveOrgan(_) => 0.30,
+        SynthEngineKind::FormantSubtractive(_) => 0.67,
+        SynthEngineKind::BowedString(_) => 0.80,
+        SynthEngineKind::WindBore(_) => 0.74,
+    }
+}
 
 enum EngineRuntime {
     Plucked {
@@ -27,6 +91,9 @@ enum EngineRuntime {
     Hammered {
         params: HammeredParams,
         strings: Vec<PluckedStringModel>,
+        detune_ratios: [f32; 3],
+        board_l: BodyResonator,
+        board_r: BodyResonator,
         thump_rng: Rng,
         thump_lp: OnePoleLp,
         thump_remaining: usize,
@@ -37,15 +104,14 @@ enum EngineRuntime {
     },
     Bowed {
         params: BowedParams,
-        model: BowedStringModel,
+        model: Box<BowedStringModel>,
         adsr: Adsr,
-        vib_lfo: Lfo,
         trem_lfo: PolyBlepOsc,
     },
     Wind {
         params: WindParams,
-        model: WindBoreModel,
-        drone: Option<WindBoreModel>,
+        model: Box<WindBoreModel>,
+        drone: Option<Box<WindBoreModel>>,
         adsr: Adsr,
         vib_lfo: Lfo,
     },
@@ -81,8 +147,8 @@ enum EngineRuntime {
         osc2: PolyBlepOsc,
         sub_osc: PolyBlepOsc,
         noise_rng: Rng,
-        filter: SvfFilter,
-        formants: Option<FormantBank>,
+        filter: StereoSvf,
+        formants: Option<(FormantBank, FormantBank)>,
         lfo: PolyBlepOsc,
         adsr: Adsr,
         filter_env: f32,
@@ -102,6 +168,7 @@ pub struct Voice {
     pub age: u64,
     pub sustained: bool,
     pub stealing: bool,
+    raw_trim: f32,
     steal_gain: f32,
     finished: bool,
     last_level: f32,
@@ -125,284 +192,317 @@ impl Voice {
         let seed =
             age.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ ((note as u64) << 8) ^ (channel as u64);
 
-        let runtime =
-            match preset.patch {
-                SynthEngineKind::PluckedString(p) => {
-                    let effective_hz = if p.harmonic_bell {
-                        base_hz * 2.0
-                    } else {
-                        base_hz
-                    };
-                    let rt60 = if p.palm_mute {
-                        p.rt60.min(0.22)
-                    } else {
-                        p.rt60
-                    };
-                    let primary = PluckedStringModel::new(
-                        effective_hz,
+        let runtime = match preset.patch {
+            SynthEngineKind::PluckedString(p) => {
+                let effective_hz = if p.harmonic_bell {
+                    base_hz * 2.0
+                } else {
+                    base_hz
+                };
+                let rt60 = if p.palm_mute {
+                    p.rt60.min(0.22)
+                } else {
+                    p.rt60
+                };
+                let primary = PluckedStringModel::new(
+                    effective_hz,
+                    sr,
+                    velocity,
+                    p.pick_pos,
+                    p.brightness,
+                    rt60,
+                    p.release_damping,
+                    p.stiffness,
+                    p.buzz,
+                    p.body_specs,
+                    p.body_dry,
+                    p.body_wet,
+                    seed,
+                );
+                let secondary = if p.octave_double {
+                    Some(PluckedStringModel::new(
+                        effective_hz * 2.0,
                         sr,
-                        velocity,
-                        p.pick_pos,
-                        p.brightness,
-                        rt60,
+                        velocity * 0.85,
+                        p.pick_pos * 1.1,
+                        (p.brightness + 0.08).min(0.98),
+                        rt60 * 0.85,
                         p.release_damping,
                         p.stiffness,
-                        p.buzz,
+                        0.0,
                         p.body_specs,
                         p.body_dry,
                         p.body_wet,
-                        seed,
+                        seed ^ 0x5555_AAAA,
+                    ))
+                } else if p.harmonic_bell {
+                    // Add gentle fundamental anchor under harmonic bell chime
+                    Some(PluckedStringModel::new(
+                        base_hz,
+                        sr,
+                        velocity * 0.55,
+                        0.5,
+                        p.brightness * 0.6,
+                        rt60 * 0.7,
+                        p.release_damping,
+                        p.stiffness,
+                        0.0,
+                        p.body_specs,
+                        p.body_dry,
+                        p.body_wet,
+                        seed ^ 0x3333_7777,
+                    ))
+                } else {
+                    None
+                };
+                EngineRuntime::Plucked {
+                    params: p,
+                    primary,
+                    secondary,
+                    cab_lp: SvfFilter::new(),
+                    env_hold_level: 1.0,
+                    released: false,
+                    release_timer: 0.0,
+                }
+            }
+            SynthEngineKind::HammeredString(p) => {
+                // Real grands: single wound strings in the low bass, pairs in the upper
+                // bass, triple unisons from the tenor up.
+                let register_count = if note < 33 {
+                    1
+                } else if note < 48 {
+                    2
+                } else {
+                    3
+                };
+                let count = (p.unison_count.clamp(1, 3) as usize).min(register_count);
+                // Unisons are never tuned perfectly. Per-key deterministic mistuning: the
+                // same key always beats the same way, like a real (slightly imperfect) tuning.
+                let mut key_rng = Rng::new(0x51A0_C0DE ^ (note as u64).wrapping_mul(0x9E37_79B9));
+                let spread: [f32; 3] = match count {
+                    1 => [0.0, 0.0, 0.0],
+                    2 => [-0.5, 0.5, 0.0],
+                    _ => [0.0, 1.0, -1.0],
+                };
+                let mut detune_ratios = [1.0_f32; 3];
+                for (ratio, &sp) in detune_ratios.iter_mut().zip(&spread) {
+                    let jitter = 0.55 + 0.9 * key_rng.next_f32_unipolar();
+                    *ratio = 2.0_f32.powf(sp * p.detune_cents * jitter / 1200.0);
+                }
+                // Higher notes naturally have shorter string decay in acoustic pianos
+                let pitch_rt =
+                    p.after_decay * (261.63 / base_hz.max(40.0)).powf(0.42).clamp(0.28, 2.1);
+                let bright = (p.brightness * (0.45 + 0.55 * velocity)).clamp(0.12, 0.98);
+                let stiff_scale = (p.stiffness / 0.32).powi(2);
+                let inharm = (piano_inharmonicity(note as f32) * stiff_scale).min(0.03);
+                let mut strings = Vec::with_capacity(count);
+                let mut disp_coeff = None;
+                for (idx, &ratio) in detune_ratios.iter().enumerate().take(count) {
+                    let hz = base_hz * ratio;
+                    // Strings are dry: the shared soundboard below radiates their sum
+                    let mut string = PluckedStringModel::new(
+                        hz,
+                        sr,
+                        velocity,
+                        0.13 + (idx as f32) * 0.015,
+                        bright,
+                        pitch_rt,
+                        p.release_damping,
+                        p.stiffness,
+                        0.0,
+                        p.body_specs,
+                        1.0,
+                        0.0,
+                        seed ^ ((idx as u64 + 1) * 0x1234_5678),
                     );
-                    let secondary = if p.octave_double {
-                        Some(PluckedStringModel::new(
-                            effective_hz * 2.0,
-                            sr,
-                            velocity * 0.85,
-                            p.pick_pos * 1.1,
-                            (p.brightness + 0.08).min(0.98),
-                            rt60 * 0.85,
-                            p.release_damping,
-                            p.stiffness,
-                            0.0,
-                            p.body_specs,
-                            p.body_dry,
-                            p.body_wet,
-                            seed ^ 0x5555_AAAA,
-                        ))
-                    } else if p.harmonic_bell {
-                        // Add gentle fundamental anchor under harmonic bell chime
-                        Some(PluckedStringModel::new(
-                            base_hz,
-                            sr,
-                            velocity * 0.55,
-                            0.5,
-                            p.brightness * 0.6,
-                            rt60 * 0.7,
-                            p.release_damping,
-                            p.stiffness,
-                            0.0,
-                            p.body_specs,
-                            p.body_dry,
-                            p.body_wet,
-                            seed ^ 0x3333_7777,
-                        ))
-                    } else {
-                        None
-                    };
-                    EngineRuntime::Plucked {
-                        params: p,
-                        primary,
-                        secondary,
-                        cab_lp: SvfFilter::new(),
-                        env_hold_level: 1.0,
-                        released: false,
-                        release_timer: 0.0,
+                    match disp_coeff {
+                        None => disp_coeff = Some(string.set_inharmonicity(hz, sr, inharm, 3)),
+                        Some(a) => string.set_dispersion(3, a),
                     }
+                    strings.push(string);
                 }
-                SynthEngineKind::HammeredString(p) => {
-                    let count = p.unison_count.clamp(1, 3) as usize;
-                    let mut strings = Vec::with_capacity(count);
-                    let detune_offsets: &[f32] = match count {
-                        1 => &[0.0],
-                        2 => &[-0.5, 0.5],
-                        _ => &[-1.0, 0.0, 1.0],
-                    };
-                    for (idx, &offset) in detune_offsets.iter().enumerate() {
-                        let cents = offset * p.detune_cents;
-                        let hz = base_hz * 2.0_f32.powf(cents / 1200.0);
-                        // Higher notes naturally have shorter string decay in acoustic pianos
-                        let pitch_rt = p.after_decay
-                            * (261.63 / base_hz.max(40.0)).powf(0.42).clamp(0.28, 2.1);
-                        let bright = (p.brightness * (0.45 + 0.55 * velocity)).clamp(0.12, 0.98);
-                        strings.push(PluckedStringModel::new(
-                            hz,
-                            sr,
-                            velocity,
-                            0.13 + (idx as f32) * 0.015,
-                            bright,
-                            pitch_rt,
-                            p.release_damping,
-                            p.stiffness,
-                            0.0,
-                            p.body_specs,
-                            0.72,
-                            0.32,
-                            seed ^ ((idx as u64 + 1) * 0x1234_5678),
-                        ));
-                    }
-                    let thump_total = ((0.008 * sr).round() as usize).max(16);
-                    EngineRuntime::Hammered {
-                        params: p,
-                        strings,
-                        thump_rng: Rng::new(seed ^ 0xBEEF),
-                        thump_lp: OnePoleLp::new(),
-                        thump_remaining: thump_total,
-                        thump_total,
-                        elapsed: 0.0,
-                        released: false,
-                        release_timer: 0.0,
-                    }
+                let thump_total = ((0.008 * sr).round() as usize).max(16);
+                EngineRuntime::Hammered {
+                    params: p,
+                    strings,
+                    detune_ratios,
+                    board_l: BodyResonator::new(p.body_specs, 0.72, 0.32, sr),
+                    board_r: BodyResonator::new(p.body_specs, 0.72, 0.32, sr),
+                    thump_rng: Rng::new(seed ^ 0xBEEF),
+                    thump_lp: OnePoleLp::new(),
+                    thump_remaining: thump_total,
+                    thump_total,
+                    elapsed: 0.0,
+                    released: false,
+                    release_timer: 0.0,
                 }
-                SynthEngineKind::BowedString(p) => {
-                    let mut adsr = Adsr::new(p.adsr);
-                    adsr.trigger();
-                    EngineRuntime::Bowed {
-                        params: p,
-                        model: BowedStringModel::new(
-                            sr,
-                            p.bow_pressure,
-                            p.brightness,
-                            p.rosin_noise,
-                            p.ensemble_detune,
-                            p.body_specs,
-                            p.body_dry,
-                            p.body_wet,
-                            seed,
-                        ),
-                        adsr,
-                        vib_lfo: Lfo::new(p.vibrato_rate, 0.18, 0.25),
-                        trem_lfo: PolyBlepOsc::new(seed ^ 0x9999),
-                    }
+            }
+            SynthEngineKind::BowedString(p) => {
+                let mut adsr = Adsr::new(p.adsr);
+                adsr.trigger();
+                EngineRuntime::Bowed {
+                    params: p,
+                    model: Box::new(BowedStringModel::new(
+                        sr,
+                        p.bow_pressure,
+                        p.brightness,
+                        p.rosin_noise,
+                        p.ensemble_detune,
+                        p.body_scale,
+                        p.vibrato_rate,
+                        seed,
+                    )),
+                    adsr,
+                    trem_lfo: PolyBlepOsc::new(seed ^ 0x9999),
                 }
-                SynthEngineKind::WindBore(p) => {
-                    let mut adsr = Adsr::new(p.adsr);
-                    adsr.trigger();
-                    let drone = if p.drone_fifth {
-                        Some(WindBoreModel::new(
-                            p.wind_type,
-                            sr,
-                            false,
-                            p.breath_noise * 0.3,
-                            p.brightness * 0.75,
-                            0.0,
-                            0.02,
-                            p.formant,
-                            p.formant_mix,
-                            seed ^ 0xD00D,
-                        ))
-                    } else {
-                        None
-                    };
-                    EngineRuntime::Wind {
-                        params: p,
-                        model: WindBoreModel::new(
-                            p.wind_type,
-                            sr,
-                            p.cylindrical_odd,
-                            p.breath_noise,
-                            p.brightness,
-                            p.scoop_cents,
-                            p.scoop_time,
-                            p.formant,
-                            p.formant_mix,
-                            seed,
-                        ),
-                        drone,
-                        adsr,
-                        vib_lfo: Lfo::new(p.vibrato_rate, 0.14, 0.22),
-                    }
+            }
+            SynthEngineKind::WindBore(p) => {
+                let mut adsr = Adsr::new(p.adsr);
+                adsr.trigger();
+                let drone = if p.drone_fifth {
+                    Some(Box::new(WindBoreModel::new(
+                        p.wind_type,
+                        sr,
+                        false,
+                        p.breath_noise * 0.3,
+                        p.brightness * 0.75,
+                        0.0,
+                        0.02,
+                        p.formant,
+                        p.formant_mix,
+                        p.voicing,
+                        seed ^ 0xD00D,
+                    )))
+                } else {
+                    None
+                };
+                EngineRuntime::Wind {
+                    params: p,
+                    model: Box::new(WindBoreModel::new(
+                        p.wind_type,
+                        sr,
+                        p.cylindrical_odd,
+                        p.breath_noise,
+                        p.brightness,
+                        p.scoop_cents,
+                        p.scoop_time,
+                        p.formant,
+                        p.formant_mix,
+                        p.voicing,
+                        seed,
+                    )),
+                    drone,
+                    adsr,
+                    vib_lfo: Lfo::new(p.vibrato_rate, 0.14, 0.22),
                 }
-                SynthEngineKind::ModalPercussion(p) => {
-                    let mut adsr =
-                        Adsr::new(AdsrParams::new(0.0005, 0.01, 1.0, p.release_time.max(0.04)));
-                    adsr.trigger();
-                    EngineRuntime::Modal {
-                        params: p,
-                        bank: ModalBank::new(
-                            p.modes,
-                            base_hz,
-                            sr,
-                            velocity,
-                            p.mallet_hardness,
-                            p.noise_amt,
-                            p.tremolo_hz,
-                            p.tremolo_depth,
-                            seed,
-                        ),
-                        adsr,
-                        elapsed: 0.0,
-                        re_struck: false,
-                    }
+            }
+            SynthEngineKind::ModalPercussion(p) => {
+                let mut adsr =
+                    Adsr::new(AdsrParams::new(0.0005, 0.01, 1.0, p.release_time.max(0.04)));
+                adsr.trigger();
+                EngineRuntime::Modal {
+                    params: p,
+                    bank: ModalBank::new(
+                        p.modes,
+                        base_hz,
+                        sr,
+                        velocity,
+                        p.mallet_hardness,
+                        p.noise_amt,
+                        p.tremolo_hz,
+                        p.tremolo_depth,
+                        seed,
+                    ),
+                    adsr,
+                    elapsed: 0.0,
+                    re_struck: false,
                 }
-                SynthEngineKind::Fm4Op(p) => {
-                    let mut adsr = Adsr::new(p.adsr);
-                    adsr.trigger();
-                    EngineRuntime::Fm {
-                        params: p,
-                        oscs: [
-                            PolyBlepOsc::new(seed),
-                            PolyBlepOsc::new(seed ^ 11),
-                            PolyBlepOsc::new(seed ^ 22),
-                            PolyBlepOsc::new(seed ^ 33),
-                        ],
-                        op_envs: [1.0; 4],
-                        op3_prev: 0.0,
-                        adsr,
-                        vib_lfo: Lfo::new(p.vibrato_rate, 0.15, 0.2),
-                    }
+            }
+            SynthEngineKind::Fm4Op(p) => {
+                let mut adsr = Adsr::new(p.adsr);
+                adsr.trigger();
+                EngineRuntime::Fm {
+                    params: p,
+                    oscs: [
+                        PolyBlepOsc::new(seed),
+                        PolyBlepOsc::new(seed ^ 11),
+                        PolyBlepOsc::new(seed ^ 22),
+                        PolyBlepOsc::new(seed ^ 33),
+                    ],
+                    op_envs: [1.0; 4],
+                    op3_prev: 0.0,
+                    adsr,
+                    vib_lfo: Lfo::new(p.vibrato_rate, 0.15, 0.2),
                 }
-                SynthEngineKind::AdditiveOrgan(p) => {
-                    let mut adsr = Adsr::new(p.adsr);
-                    adsr.trigger();
-                    let mut rng = Rng::new(seed);
-                    let mut oscs = core::array::from_fn(|i| {
-                        let phase = rng.next_f32_unipolar() * 0.03; // Slight random phase avoids spike
-                        PolyBlepOsc::new(seed ^ (i as u64 + 7)).with_phase(phase)
-                    });
-                    let _ = &mut oscs;
-                    let click_remaining = ((0.003 * sr).round() as usize).max(8);
-                    EngineRuntime::Organ {
-                        params: p,
-                        oscs,
-                        perc_osc: PolyBlepOsc::new(seed ^ 0x4444),
-                        perc_env: if p.percussion_level > 0.0 { 1.0 } else { 0.0 },
-                        click_rng: Rng::new(seed ^ 0x7777),
-                        click_lp: OnePoleLp::new(),
-                        click_remaining,
-                        rotary_lfo: PolyBlepOsc::new(seed ^ 0x8888),
-                        adsr,
-                    }
+            }
+            SynthEngineKind::AdditiveOrgan(p) => {
+                let mut adsr = Adsr::new(p.adsr);
+                adsr.trigger();
+                let mut rng = Rng::new(seed);
+                let mut oscs = core::array::from_fn(|i| {
+                    let phase = rng.next_f32_unipolar() * 0.03; // Slight random phase avoids spike
+                    PolyBlepOsc::new(seed ^ (i as u64 + 7)).with_phase(phase)
+                });
+                let _ = &mut oscs;
+                let click_remaining = ((0.003 * sr).round() as usize).max(8);
+                EngineRuntime::Organ {
+                    params: p,
+                    oscs,
+                    perc_osc: PolyBlepOsc::new(seed ^ 0x4444),
+                    perc_env: if p.percussion_level > 0.0 { 1.0 } else { 0.0 },
+                    click_rng: Rng::new(seed ^ 0x7777),
+                    click_lp: OnePoleLp::new(),
+                    click_remaining,
+                    rotary_lfo: PolyBlepOsc::new(seed ^ 0x8888),
+                    adsr,
                 }
-                SynthEngineKind::FormantSubtractive(p) => {
-                    let mut adsr = Adsr::new(p.adsr);
-                    adsr.trigger();
-                    let count = p.unison_voices.clamp(1, 5) as usize;
-                    let mut rng = Rng::new(seed);
-                    let unison_oscs =
-                        (0..count)
-                            .map(|i| {
-                                PolyBlepOsc::new(seed ^ ((i as u64 + 1) * 19))
-                                    .with_phase(if i == 0 { 0.0 } else { rng.next_f32_unipolar() })
-                            })
-                            .collect();
-                    let formants = p.formant.map(|fp| FormantBank::new(fp, sr));
-                    EngineRuntime::Sub {
-                        params: p,
-                        unison_oscs,
-                        osc2: PolyBlepOsc::new(seed ^ 0xCAFE),
-                        sub_osc: PolyBlepOsc::new(seed ^ 0xBABE),
-                        noise_rng: Rng::new(seed ^ 0xDEAD),
-                        filter: SvfFilter::new(),
-                        formants,
-                        lfo: PolyBlepOsc::new(seed ^ 0xFACE),
-                        adsr,
-                        filter_env: 1.0,
-                        pitch_env: 1.0,
-                    }
+            }
+            SynthEngineKind::FormantSubtractive(p) => {
+                let mut adsr = Adsr::new(p.adsr);
+                adsr.trigger();
+                let count = p.unison_voices.clamp(1, 5) as usize;
+                let mut rng = Rng::new(seed);
+                let unison_oscs = (0..count)
+                    .map(|i| {
+                        PolyBlepOsc::new(seed ^ ((i as u64 + 1) * 19)).with_phase(if i == 0 {
+                            0.0
+                        } else {
+                            rng.next_f32_unipolar()
+                        })
+                    })
+                    .collect();
+                let formants = p
+                    .formant
+                    .map(|fp| (FormantBank::new(fp, sr), FormantBank::new(fp, sr)));
+                EngineRuntime::Sub {
+                    params: p,
+                    unison_oscs,
+                    osc2: PolyBlepOsc::new(seed ^ 0xCAFE),
+                    sub_osc: PolyBlepOsc::new(seed ^ 0xBABE),
+                    noise_rng: Rng::new(seed ^ 0xDEAD),
+                    filter: StereoSvf::new(),
+                    formants,
+                    lfo: PolyBlepOsc::new(seed ^ 0xFACE),
+                    adsr,
+                    filter_env: 1.0,
+                    pitch_env: 1.0,
                 }
-            };
+            }
+        };
 
+        let vel_gain = (velocity / VELOCITY_REF).powf(velocity_exponent(&preset.patch));
         Self {
             channel,
             note,
             velocity,
             base_hz,
-            gain: preset.gain,
+            gain: preset.gain * vel_gain,
             reverb_send: (preset.default_reverb * 0.7 + reverb_override * 0.3).clamp(0.0, 1.0),
             chorus_send: (preset.default_chorus.max(chorus_override)).clamp(0.0, 1.0),
             age,
             sustained: false,
             stealing: false,
+            raw_trim: raw_output_trim(&preset.patch),
             steal_gain: 1.0,
             finished: false,
             last_level: 1.0,
@@ -561,6 +661,9 @@ impl Voice {
             EngineRuntime::Hammered {
                 params,
                 strings,
+                detune_ratios,
+                board_l,
+                board_r,
                 thump_rng,
                 thump_lp,
                 thump_remaining,
@@ -579,15 +682,8 @@ impl Voice {
                 let mut sum_l = 0.0_f32;
                 let mut sum_r = 0.0_f32;
                 let count = strings.len();
-                let detune_offsets: &[f32] = match count {
-                    1 => &[0.0],
-                    2 => &[-0.5, 0.5],
-                    _ => &[-1.0, 0.0, 1.0],
-                };
                 for (idx, s_model) in strings.iter_mut().enumerate() {
-                    let cents = detune_offsets[idx] * params.detune_cents;
-                    let f = freq * 2.0_f32.powf(cents / 1200.0);
-                    let y = s_model.next_sample(f, sr);
+                    let y = s_model.next_sample(freq * detune_ratios[idx], sr);
                     let pan_offset = if count > 1 {
                         (idx as f32 / (count - 1) as f32 - 0.5) * params.stereo_width
                     } else {
@@ -613,6 +709,10 @@ impl Voice {
                     r += thump;
                     *thump_remaining -= 1;
                 }
+
+                // Strings and hammer knock radiate through the shared soundboard
+                let l = board_l.process(l);
+                let r = board_r.process(r);
 
                 // Subtle stereo piano soundboard key-position spread (bass left, treble right)
                 let kb_pan = ((self.note as f32 - 60.0) / 48.0).clamp(-0.6, 0.6)
@@ -641,23 +741,23 @@ impl Voice {
                 params,
                 model,
                 adsr,
-                vib_lfo,
                 trem_lfo,
             } => {
                 let env = adsr.next(sr);
                 if adsr.is_finished() {
                     self.finished = true;
                 }
-                let vib_cents =
-                    vib_lfo.next_sine(sr) * (params.vibrato_depth_cents + mod_wheel * 28.0);
-                let f = freq * 2.0_f32.powf(vib_cents / 1200.0);
-                let mut s = model.next_sample(f, sr, env, vel) * env;
+                let depth = params.vibrato_depth_cents + mod_wheel * 28.0;
+                let (mut l, mut r) = model.next_sample(freq, sr, env, vel, depth);
+                l *= env;
+                r *= env;
                 if params.tremolo_hz > 0.5 {
                     let dt_t = PolyBlepOsc::dt(params.tremolo_hz, sr);
                     let trem = 0.68 + 0.32 * trem_lfo.next_sample(Waveform::Sine, dt_t);
-                    s *= trem;
+                    l *= trem;
+                    r *= trem;
                 }
-                (s, s)
+                (l, r)
             }
             EngineRuntime::Wind {
                 params,
@@ -932,26 +1032,33 @@ impl Voice {
                     + params.lfo_filter_amt * lfo_val)
                     .clamp(35.0, 0.45 * sr);
 
-                let mono_mix = 0.5 * (mono_l + mono_r);
-                let side = 0.5 * (mono_l - mono_r);
-                let mut filt_mono =
-                    filter.process(mono_mix, cutoff, params.resonance_q, sr, params.filter_mode);
+                // Filter both sides: the unison/stereo spread must go through the same filter,
+                // otherwise bright unfiltered detuned saws leak around every filter sweep.
+                let (mut fl, mut fr) = filter.process(
+                    mono_l,
+                    mono_r,
+                    cutoff,
+                    params.resonance_q,
+                    sr,
+                    params.filter_mode,
+                );
 
-                if let Some(fmt) = formants {
-                    let f_sig = fmt.process(filt_mono) * 1.35;
-                    filt_mono = filt_mono * (1.0 - params.formant_mix) + f_sig * params.formant_mix;
+                if let Some((fmt_l, fmt_r)) = formants {
+                    let mix = params.formant_mix;
+                    fl = fl * (1.0 - mix) + fmt_l.process(fl) * 1.35 * mix;
+                    fr = fr * (1.0 - mix) + fmt_r.process(fr) * 1.35 * mix;
                 }
 
+                let mid = 0.5 * (fl + fr);
+                let side = 0.5 * (fl - fr) * 0.65;
                 let amp = env * (0.35 + 0.65 * vel);
-                (
-                    (filt_mono + side * 0.65) * amp,
-                    (filt_mono - side * 0.65) * amp,
-                )
+                ((mid + side) * amp, (mid - side) * amp)
             }
         };
 
-        out_l = soft_clip(out_l) * self.gain * expression * self.steal_gain;
-        out_r = soft_clip(out_r) * self.gain * expression * self.steal_gain;
+        let post = self.gain * expression * self.steal_gain;
+        out_l = soft_limit(out_l * self.raw_trim) * post;
+        out_r = soft_limit(out_r * self.raw_trim) * post;
         self.last_level = 0.5 * (out_l.abs() + out_r.abs());
         (out_l, out_r)
     }

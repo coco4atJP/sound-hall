@@ -7,8 +7,9 @@ use std::process::{self, Command};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use sound_hall_core::{
-    all_drums, all_presets, find_preset, get_demo, list_demos, parse_demo, parse_score, parse_smf,
-    search_presets, write_wav_i16, MidiEvent, MidiSequencer, MidiSong, SoundHallEngine, TimedEvent,
+    all_bank_presets, all_drums, find_preset, get_demo, list_demos, parse_demo, parse_score,
+    parse_smf, search_presets, write_wav_i16, MidiEvent, MidiSequencer, MidiSong, SoundHallEngine,
+    TimedEvent, WAGAKKI_BANK,
 };
 
 fn print_help() {
@@ -19,8 +20,8 @@ USAGE:
   sound-hall <COMMAND> [OPTIONS]
 
 COMMANDS:
-  list [--family <name>] [--search <query>] [--drums]
-      GM全128楽器または47ドラムキットを一覧表示
+  list [--family <name>] [--search <query>] [--bank <0|1>] [--wagakki] [--drums]
+      GM全128楽器＋和楽器バンク（Bank 1, 23音色）または47ドラムキットを一覧表示
   info <program_or_name>
       指定した楽器の合成エンジン・音響パラメータ・音域詳細を表示
   note <program_or_name> [pitch=60] [--duration 1.5] [--velocity 100] [--out path.wav] [--play]
@@ -28,7 +29,7 @@ COMMANDS:
   chord <program_or_name> [pitches=60,64,67] [--duration 2.0] [--arpeggio 0.05] [--out path.wav] [--play]
       和音（アルペジオ対応）を合成してWAV書き出し / 試聴再生
   demo [name|list] [--out path.wav] [--play] [--reverb 0.3] [--normalize]
-      内蔵デモ曲の一覧表示またはレンダリング・再生 (orchestra, jazz, wagakki, electronic, gm-tour)
+      内蔵デモ曲の一覧表示またはレンダリング・再生 (orchestra, jazz, wagakki, matsuri, gagaku, electronic, gm-tour)
   render <input.mid|input.shs> -o <output.wav> [--sample-rate 44100] [--reverb 0.3] [--normalize]
       MIDI (.mid) またはスコア (.shs) ファイルをWAVにレンダリング
   play <input.mid|input.shs> [--sample-rate 44100] [--reverb 0.3]
@@ -226,6 +227,7 @@ fn load_song(path: &Path) -> Result<MidiSong, String> {
 fn cmd_list(args: &[String]) {
     let mut family_filter: Option<String> = None;
     let mut search_filter: Option<String> = None;
+    let mut bank_filter: Option<u8> = None;
     let mut show_drums = false;
 
     let mut i = 0;
@@ -240,6 +242,11 @@ fn cmd_list(args: &[String]) {
                 search_filter = Some(require_arg(args, i, "--search").to_string());
             }
             "--drums" | "-d" => show_drums = true,
+            "--bank" | "-b" => {
+                i += 1;
+                bank_filter = Some(parse_u32_arg(args, i, "--bank", 0, 127) as u8);
+            }
+            "--wagakki" | "-w" => bank_filter = Some(WAGAKKI_BANK),
             other => die(&format!("unknown option for list: {other}")),
         }
         i += 1;
@@ -268,19 +275,22 @@ fn cmd_list(args: &[String]) {
         return;
     }
 
-    let list = if let Some(ref q) = search_filter {
+    let list: Vec<_> = if let Some(ref q) = search_filter {
         search_presets(q)
     } else {
-        all_presets().iter().collect()
+        all_bank_presets().collect()
     };
 
     println!(
-        "{:<4} {:<30} {:<32} {:<22}",
-        "Prog", "Name (EN)", "名前 (JA)", "Family"
+        "{:<8} {:<30} {:<32} {:<22}",
+        "Bank:Prg", "Name (EN)", "名前 (JA)", "Family"
     );
-    println!("{}", "-".repeat(94));
+    println!("{}", "-".repeat(98));
     let mut count = 0;
     for p in list {
+        if bank_filter.is_some_and(|b| b != p.bank) {
+            continue;
+        }
         if let Some(ref fam) = family_filter {
             let fl = fam.to_ascii_lowercase();
             if !p.family.name_en().to_ascii_lowercase().contains(&fl)
@@ -289,16 +299,23 @@ fn cmd_list(args: &[String]) {
                 continue;
             }
         }
+        let family = if p.bank == WAGAKKI_BANK {
+            format!("和楽器 / {}", p.family.name_en())
+        } else {
+            p.family.name_en().to_string()
+        };
         println!(
-            "{:<4} {:<30} {:<32} {}",
-            p.program,
+            "{:<8} {:<30} {:<32} {}",
+            format!("{}:{}", p.bank, p.program),
             p.name_en,
             p.name_ja,
-            p.family.name_en()
+            family
         );
         count += 1;
     }
-    println!("\nTotal: {count} instruments (use `--drums` for 47 GM percussion voices)");
+    println!(
+        "\nTotal: {count} instruments (Bank 0 = General MIDI, Bank 1 = 和楽器; `--drums` for 47 GM percussion voices)"
+    );
 }
 
 fn cmd_info(args: &[String]) {
@@ -308,7 +325,14 @@ fn cmd_info(args: &[String]) {
     let p =
         find_preset(query).unwrap_or_else(|| die(&format!("instrument not found for '{query}'")));
 
-    println!("Program     : {} (GM #{})", p.name_en, p.program);
+    if p.bank == WAGAKKI_BANK {
+        println!(
+            "Program     : {} (和楽器 Bank {} #{} — CC0={} + Program {})",
+            p.name_en, p.bank, p.program, p.bank, p.program
+        );
+    } else {
+        println!("Program     : {} (GM #{})", p.name_en, p.program);
+    }
     println!("日本語名    : {}", p.name_ja);
     println!(
         "Family      : {} / {}",
@@ -377,6 +401,14 @@ fn cmd_note(args: &[String]) {
 
     let song = MidiSong::new(
         vec![
+            TimedEvent {
+                time_sec: 0.0,
+                event: MidiEvent::ControlChange {
+                    channel: 0,
+                    cc: 0,
+                    value: preset.bank,
+                },
+            },
             TimedEvent {
                 time_sec: 0.0,
                 event: MidiEvent::ProgramChange {
@@ -475,13 +507,23 @@ fn cmd_chord(args: &[String]) {
         do_play = true;
     }
 
-    let mut events = vec![TimedEvent {
-        time_sec: 0.0,
-        event: MidiEvent::ProgramChange {
-            channel: 0,
-            program: preset.program,
+    let mut events = vec![
+        TimedEvent {
+            time_sec: 0.0,
+            event: MidiEvent::ControlChange {
+                channel: 0,
+                cc: 0,
+                value: preset.bank,
+            },
         },
-    }];
+        TimedEvent {
+            time_sec: 0.0,
+            event: MidiEvent::ProgramChange {
+                channel: 0,
+                program: preset.program,
+            },
+        },
+    ];
     for (idx, &note) in pitches.iter().enumerate() {
         let onset = idx as f64 * arpeggio;
         events.push(TimedEvent {

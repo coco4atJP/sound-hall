@@ -56,20 +56,21 @@ pub const PRESETS_0_15: [PresetMetadata; 16] = [
     // 0: Acoustic Grand Piano
     PresetMetadata {
         program: 0,
+        bank: 0,
         name_en: "Acoustic Grand Piano",
         name_ja: "アコースティック・グランドピアノ",
         family: GmFamily::Piano,
-        gain: 1.05,
+        gain: 5.10,
         default_reverb: 0.30,
         default_chorus: 0.05,
         pitch_range: (21, 108),
         patch: SynthEngineKind::HammeredString(HammeredParams {
-            unison_count: 2,
+            unison_count: 3,
             detune_cents: 1.8,
             brightness: 0.72,
             stiffness: 0.32,
             prompt_decay: 0.28,
-            after_decay: 3.1,
+            after_decay: 7.0,
             release_damping: 0.09,
             hammer_thump: 0.28,
             body_specs: [(110.0, 2.4, 0.25), (320.0, 2.8, 0.20), (1050.0, 2.2, 0.12)],
@@ -79,20 +80,21 @@ pub const PRESETS_0_15: [PresetMetadata; 16] = [
     // 1: Bright Acoustic Piano
     PresetMetadata {
         program: 1,
+        bank: 0,
         name_en: "Bright Acoustic Piano",
         name_ja: "ブライト・アコースティックピアノ",
         family: GmFamily::Piano,
-        gain: 1.05,
+        gain: 4.47,
         default_reverb: 0.28,
         default_chorus: 0.06,
         pitch_range: (21, 108),
         patch: SynthEngineKind::HammeredString(HammeredParams {
-            unison_count: 2,
+            unison_count: 3,
             detune_cents: 2.2,
             brightness: 0.90,
             stiffness: 0.42,
             prompt_decay: 0.24,
-            after_decay: 2.8,
+            after_decay: 6.4,
             release_damping: 0.08,
             hammer_thump: 0.36,
             body_specs: [(130.0, 2.2, 0.22), (480.0, 2.6, 0.22), (1650.0, 2.4, 0.18)],
@@ -102,10 +104,11 @@ pub const PRESETS_0_15: [PresetMetadata; 16] = [
     // 2: Electric Grand Piano
     PresetMetadata {
         program: 2,
+        bank: 0,
         name_en: "Electric Grand Piano",
         name_ja: "エレクトリック・グランドピアノ",
         family: GmFamily::Piano,
-        gain: 1.0,
+        gain: 5.53,
         default_reverb: 0.26,
         default_chorus: 0.38,
         pitch_range: (28, 103),
@@ -115,7 +118,7 @@ pub const PRESETS_0_15: [PresetMetadata; 16] = [
             brightness: 0.85,
             stiffness: 0.52,
             prompt_decay: 0.22,
-            after_decay: 2.4,
+            after_decay: 5.2,
             release_damping: 0.07,
             hammer_thump: 0.24,
             body_specs: [(220.0, 2.5, 0.25), (850.0, 3.0, 0.28), (2400.0, 2.8, 0.22)],
@@ -125,10 +128,11 @@ pub const PRESETS_0_15: [PresetMetadata; 16] = [
     // 3: Honky-Tonk Piano
     PresetMetadata {
         program: 3,
+        bank: 0,
         name_en: "Honky-Tonk Piano",
         name_ja: "ホンキートンク・ピアノ",
         family: GmFamily::Piano,
-        gain: 1.0,
+        gain: 5.99,
         default_reverb: 0.24,
         default_chorus: 0.12,
         pitch_range: (21, 108),
@@ -138,7 +142,7 @@ pub const PRESETS_0_15: [PresetMetadata; 16] = [
             brightness: 0.86,
             stiffness: 0.48,
             prompt_decay: 0.25,
-            after_decay: 2.4,
+            after_decay: 5.6,
             release_damping: 0.08,
             hammer_thump: 0.38,
             body_specs: [(160.0, 2.6, 0.24), (620.0, 3.2, 0.28), (1900.0, 2.5, 0.20)],
@@ -148,10 +152,11 @@ pub const PRESETS_0_15: [PresetMetadata; 16] = [
     // 4: Electric Piano 1 (Rhodes)
     PresetMetadata {
         program: 4,
+        bank: 0,
         name_en: "Electric Piano 1",
         name_ja: "エレクトリックピアノ1 (ローズ)",
         family: GmFamily::Piano,
-        gain: 0.92,
+        gain: 2.67,
         default_reverb: 0.28,
         default_chorus: 0.42,
         pitch_range: (28, 103),
@@ -172,10 +177,11 @@ pub const PRESETS_0_15: [PresetMetadata; 16] = [
     // 5: Electric Piano 2 (DX7 FM)
     PresetMetadata {
         program: 5,
+        bank: 0,
         name_en: "Electric Piano 2",
         name_ja: "エレクトリックピアノ2 (FM)",
         family: GmFamily::Piano,
-        gain: 0.90,
+        gain: 2.80,
         default_reverb: 0.32,
         default_chorus: 0.48,
         pitch_range: (28, 108),
@@ -196,10 +202,11 @@ pub const PRESETS_0_15: [PresetMetadata; 16] = [
     // 6: Harpsichord
     PresetMetadata {
         program: 6,
+        bank: 0,
         name_en: "Harpsichord",
         name_ja: "ハープシコード (チェンバロ)",
         family: GmFamily::Piano,
-        gain: 0.95,
+        gain: 4.84,
         default_reverb: 0.30,
         default_chorus: 0.0,
         pitch_range: (29, 89),
@@ -222,10 +229,11 @@ pub const PRESETS_0_15: [PresetMetadata; 16] = [
     // 7: Clavinet
     PresetMetadata {
         program: 7,
+        bank: 0,
         name_en: "Clavinet",
         name_ja: "クラビネット",
         family: GmFamily::Piano,
-        gain: 0.95,
+        gain: 4.68,
         default_reverb: 0.15,
         default_chorus: 0.08,
         pitch_range: (28, 88),
@@ -248,10 +256,11 @@ pub const PRESETS_0_15: [PresetMetadata; 16] = [
     // 8: Celesta
     PresetMetadata {
         program: 8,
+        bank: 0,
         name_en: "Celesta",
         name_ja: "チェレスタ",
         family: GmFamily::ChromaticPercussion,
-        gain: 0.90,
+        gain: 2.35,
         default_reverb: 0.38,
         default_chorus: 0.10,
         pitch_range: (60, 108),
@@ -268,10 +277,11 @@ pub const PRESETS_0_15: [PresetMetadata; 16] = [
     // 9: Glockenspiel
     PresetMetadata {
         program: 9,
+        bank: 0,
         name_en: "Glockenspiel",
         name_ja: "グロッケンシュピール",
         family: GmFamily::ChromaticPercussion,
-        gain: 0.88,
+        gain: 1.79,
         default_reverb: 0.40,
         default_chorus: 0.0,
         pitch_range: (72, 108),
@@ -288,10 +298,11 @@ pub const PRESETS_0_15: [PresetMetadata; 16] = [
     // 10: Music Box
     PresetMetadata {
         program: 10,
+        bank: 0,
         name_en: "Music Box",
         name_ja: "オルゴール",
         family: GmFamily::ChromaticPercussion,
-        gain: 0.90,
+        gain: 2.35,
         default_reverb: 0.35,
         default_chorus: 0.0,
         pitch_range: (60, 104),
@@ -308,10 +319,11 @@ pub const PRESETS_0_15: [PresetMetadata; 16] = [
     // 11: Vibraphone
     PresetMetadata {
         program: 11,
+        bank: 0,
         name_en: "Vibraphone",
         name_ja: "ヴィブラフォン",
         family: GmFamily::ChromaticPercussion,
-        gain: 0.95,
+        gain: 2.62,
         default_reverb: 0.34,
         default_chorus: 0.08,
         pitch_range: (53, 89),
@@ -328,10 +340,11 @@ pub const PRESETS_0_15: [PresetMetadata; 16] = [
     // 12: Marimba
     PresetMetadata {
         program: 12,
+        bank: 0,
         name_en: "Marimba",
         name_ja: "マリンバ",
         family: GmFamily::ChromaticPercussion,
-        gain: 1.05,
+        gain: 2.56,
         default_reverb: 0.28,
         default_chorus: 0.0,
         pitch_range: (45, 96),
@@ -348,10 +361,11 @@ pub const PRESETS_0_15: [PresetMetadata; 16] = [
     // 13: Xylophone
     PresetMetadata {
         program: 13,
+        bank: 0,
         name_en: "Xylophone",
         name_ja: "シロフォン (木琴)",
         family: GmFamily::ChromaticPercussion,
-        gain: 1.0,
+        gain: 2.78,
         default_reverb: 0.25,
         default_chorus: 0.0,
         pitch_range: (57, 108),
@@ -368,10 +382,11 @@ pub const PRESETS_0_15: [PresetMetadata; 16] = [
     // 14: Tubular Bells
     PresetMetadata {
         program: 14,
+        bank: 0,
         name_en: "Tubular Bells",
         name_ja: "チューブラーベル",
         family: GmFamily::ChromaticPercussion,
-        gain: 0.88,
+        gain: 2.31,
         default_reverb: 0.50,
         default_chorus: 0.0,
         pitch_range: (48, 84),
@@ -388,10 +403,11 @@ pub const PRESETS_0_15: [PresetMetadata; 16] = [
     // 15: Dulcimer
     PresetMetadata {
         program: 15,
+        bank: 0,
         name_en: "Dulcimer",
         name_ja: "ダルシマー",
         family: GmFamily::ChromaticPercussion,
-        gain: 0.95,
+        gain: 4.12,
         default_reverb: 0.32,
         default_chorus: 0.10,
         pitch_range: (48, 96),

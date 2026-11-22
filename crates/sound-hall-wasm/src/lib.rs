@@ -8,8 +8,8 @@ use std::alloc::{alloc, dealloc, Layout};
 use std::slice;
 
 use sound_hall_core::{
-    all_drums, all_presets, list_demos, parse_demo, parse_score, parse_smf, write_wav_i16,
-    MidiEvent, MidiSequencer, MidiSong, SoundHallEngine,
+    all_drums, all_presets, list_demos, parse_demo, parse_score, parse_smf, wagakki_presets,
+    write_wav_i16, MidiEvent, MidiSequencer, MidiSong, SoundHallEngine,
 };
 
 /// Opaque studio state wrapping `SoundHallEngine` with a real-time sequencer,
@@ -23,6 +23,7 @@ pub struct WasmStudio {
     seq_total_frames: usize,
     active_notes_bitmap: [u64; 2],
     channel_programs: [u8; 16],
+    channel_banks: [u8; 16],
     channel_last_note: [u8; 16],
     channel_gate_frames: [u32; 16],
     gate_max_frames: u32,
@@ -44,6 +45,7 @@ impl WasmStudio {
             seq_total_frames: 0,
             active_notes_bitmap: [0; 2],
             channel_programs: [0; 16],
+            channel_banks: [0; 16],
             channel_last_note: [60; 16],
             channel_gate_frames: [0; 16],
             gate_max_frames,
@@ -97,6 +99,9 @@ impl WasmStudio {
     }
 
     pub fn control_change(&mut self, ch: u8, cc: u8, value: u8) {
+        if cc == 0 {
+            self.channel_banks[(ch & 0x0F) as usize] = value & 0x7F;
+        }
         if matches!(cc, 120 | 123..=127) {
             self.active_notes_bitmap = [0; 2];
         }
@@ -118,6 +123,7 @@ impl WasmStudio {
         self.seq_event_idx = 0;
         self.clear_telemetry_notes();
         self.channel_programs = [0; 16];
+        self.channel_banks = [0; 16];
         self.engine.reset();
     }
 
@@ -157,9 +163,20 @@ impl WasmStudio {
             if ev.time_sec > 0.0001 {
                 break;
             }
-            if let MidiEvent::ProgramChange { channel, program } = ev.event {
-                self.channel_programs[(channel & 0x0F) as usize] = program & 0x7F;
-                self.engine.program_change(channel, program);
+            match ev.event {
+                MidiEvent::ProgramChange { channel, program } => {
+                    self.channel_programs[(channel & 0x0F) as usize] = program & 0x7F;
+                    self.engine.program_change(channel, program);
+                }
+                MidiEvent::ControlChange {
+                    channel,
+                    cc: 0,
+                    value,
+                } => {
+                    self.channel_banks[(channel & 0x0F) as usize] = value & 0x7F;
+                    self.engine.control_change(channel, 0, value);
+                }
+                _ => {}
             }
         }
 
@@ -293,6 +310,9 @@ impl WasmStudio {
                         self.engine.program_change(channel, program);
                     }
                     MidiEvent::ControlChange { channel, cc, value } => {
+                        if cc == 0 {
+                            self.channel_banks[(channel & 0x0F) as usize] = value & 0x7F;
+                        }
                         self.engine.control_change(channel, cc, value);
                     }
                     MidiEvent::PitchBend {
@@ -472,7 +492,7 @@ pub unsafe extern "C" fn sh_set_chorus_mix(ptr: *mut WasmStudio, mix: f32) {
     }
 }
 
-/// Loads one of the 5 built-in demo songs (`0..=4`) into the sequencer.
+/// Loads one of the built-in demo songs (index into `list_demos()`) into the sequencer.
 /// Returns song duration in seconds, or `-1.0` if `demo_index` is invalid.
 ///
 /// # Safety
@@ -693,6 +713,17 @@ pub unsafe extern "C" fn sh_channel_program(ptr: *const WasmStudio, ch: u8) -> u
         .unwrap_or(0)
 }
 
+/// Returns the current Bank Select MSB (CC 0) of `ch` (0 = General MIDI, 1 = 和楽器).
+///
+/// # Safety
+/// `ptr` must be a valid pointer from `sh_engine_new`.
+#[no_mangle]
+pub unsafe extern "C" fn sh_channel_bank(ptr: *const WasmStudio, ch: u8) -> u8 {
+    ptr.as_ref()
+        .map(|s| s.channel_banks[(ch & 0x0F) as usize])
+        .unwrap_or(0)
+}
+
 /// Returns normalized recent note activity (`0.0..=1.0`) on channel `ch` (`0..=15`).
 ///
 /// # Safety
@@ -860,6 +891,12 @@ pub extern "C" fn sh_preset_count() -> u32 {
     all_presets().len() as u32
 }
 
+/// Returns the number of presets in the 和楽器 bank (Bank Select MSB 1).
+#[no_mangle]
+pub extern "C" fn sh_wagakki_count() -> u32 {
+    wagakki_presets().len() as u32
+}
+
 /// Returns the total number of built-in GM drum kit voices (47).
 #[no_mangle]
 pub extern "C" fn sh_drum_count() -> u32 {
@@ -874,6 +911,7 @@ mod tests {
     fn ffi_lifecycle_and_safety_guards() {
         assert_eq!(sh_preset_count(), 128);
         assert_eq!(sh_drum_count(), 47);
+        assert_eq!(sh_wagakki_count(), 23);
 
         let mem = sh_alloc(64);
         assert!(!mem.is_null());

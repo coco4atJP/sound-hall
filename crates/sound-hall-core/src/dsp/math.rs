@@ -21,6 +21,30 @@ pub fn soft_clip(x: f32) -> f32 {
     x.tanh()
 }
 
+/// Transparent safety saturator: exactly linear for `|x| <= 0.75`, then a C1-continuous
+/// soft knee that asymptotically approaches ±1.0.
+///
+/// Unlike [`soft_clip`] (`tanh`), it adds no compression or harmonic coloration at normal
+/// signal levels, so it can sit inside feedback loops and on voice outputs without
+/// changing decay rates or timbre.
+#[inline]
+pub fn soft_limit(x: f32) -> f32 {
+    const KNEE: f32 = 0.75;
+    const HEADROOM: f32 = 1.0 - KNEE;
+    if !x.is_finite() {
+        return 0.0;
+    }
+    let a = x.abs();
+    if a <= KNEE {
+        x
+    } else {
+        // Rational knee: slope 1 at the knee, asymptote at 1.0
+        let over = (a - KNEE) / HEADROOM;
+        let shaped = KNEE + HEADROOM * over / (1.0 + over);
+        shaped.copysign(x)
+    }
+}
+
 /// Flushes subnormal/denormal and non-finite floating-point values to zero.
 #[inline]
 pub fn flush_denormal(x: f32) -> f32 {
@@ -170,5 +194,21 @@ mod tests {
         }
         assert_eq!(flush_denormal(1e-30), 0.0);
         assert_eq!(flush_denormal(f32::NAN), 0.0);
+    }
+
+    #[test]
+    fn soft_limit_is_transparent_then_bounded() {
+        for x in [-0.75_f32, -0.3, 0.0, 0.2, 0.5, 0.75] {
+            assert_eq!(soft_limit(x), x);
+        }
+        let mut prev = 0.75_f32;
+        for i in 1..400 {
+            let x = 0.75 + i as f32 * 0.05;
+            let y = soft_limit(x);
+            assert!(y > prev && y < 1.0, "monotonic and bounded: x={x} y={y}");
+            assert_eq!(soft_limit(-x), -y);
+            prev = y;
+        }
+        assert_eq!(soft_limit(f32::NAN), 0.0);
     }
 }

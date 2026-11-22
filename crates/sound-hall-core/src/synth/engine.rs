@@ -1,23 +1,80 @@
 use crate::dsp::effects::{HallReverb, MasterLimiter, StereoChorus};
+use crate::dsp::filter::{SvfFilter, SvfMode};
 use crate::dsp::math::equal_power_pan;
 use crate::midi::event::MidiEvent;
-use crate::presets::{get_drum_patch, get_preset};
+use crate::presets::{get_bank_preset, get_drum_patch};
 
 use super::channel::ChannelState;
 use super::drum::DrumVoice;
 use super::voice::Voice;
 
 const SQRT2: f32 = core::f32::consts::SQRT_2;
+/// Default user-facing master gain.
+const DEFAULT_MASTER_GAIN: f32 = 0.85;
+/// Fixed mix-bus headroom (-7 dB) so dense arrangements only touch the limiter on peaks.
+const BUS_HEADROOM: f32 = 0.45;
+/// Channel gain smoothing time constant (seconds) — removes zipper noise on CC 7/10/11.
+const CHANNEL_SMOOTH_SEC: f32 = 0.008;
+/// Subsonic master high-pass corner (Hz): removes DC and inaudible rumble that eats headroom.
+const MASTER_HPF_HZ: f32 = 18.0;
+
+/// Smoothed per-channel output gains (pan law × volume × expression).
+#[derive(Clone, Copy, Debug)]
+struct ChannelMix {
+    gain_l: f32,
+    gain_r: f32,
+    level: f32,
+    target_l: f32,
+    target_r: f32,
+    target_level: f32,
+}
+
+impl ChannelMix {
+    fn from_state(ch: &ChannelState) -> Self {
+        let mut m = Self {
+            gain_l: 0.0,
+            gain_r: 0.0,
+            level: 0.0,
+            target_l: 0.0,
+            target_r: 0.0,
+            target_level: 0.0,
+        };
+        m.retarget(ch);
+        m.gain_l = m.target_l;
+        m.gain_r = m.target_r;
+        m.level = m.target_level;
+        m
+    }
+
+    fn retarget(&mut self, ch: &ChannelState) {
+        let (pan_l, pan_r) = equal_power_pan(ch.pan);
+        let level = ch.level();
+        self.target_l = pan_l * SQRT2 * level;
+        self.target_r = pan_r * SQRT2 * level;
+        self.target_level = level;
+    }
+
+    #[inline]
+    fn tick(&mut self, k: f32) {
+        self.gain_l += (self.target_l - self.gain_l) * k;
+        self.gain_r += (self.target_r - self.gain_r) * k;
+        self.level += (self.target_level - self.level) * k;
+    }
+}
 
 /// Zero-sample physical modeling & hybrid General MIDI synthesis engine.
 pub struct SoundHallEngine {
     sample_rate: f32,
     max_voices: usize,
     channels: [ChannelState; 16],
+    mix: [ChannelMix; 16],
+    smooth_k: f32,
     voices: Vec<Voice>,
     drums: Vec<DrumVoice>,
     chorus: StereoChorus,
     reverb: HallReverb,
+    hpf_l: SvfFilter,
+    hpf_r: SvfFilter,
     limiter: MasterLimiter,
     master_gain: f32,
     age_counter: u64,
@@ -37,17 +94,22 @@ impl SoundHallEngine {
             44100.0
         };
         let max_voices = max_voices.clamp(4, 256);
-        let channels = core::array::from_fn(|i| ChannelState::new(i as u8));
+        let channels: [ChannelState; 16] = core::array::from_fn(|i| ChannelState::new(i as u8));
+        let mix = core::array::from_fn(|i| ChannelMix::from_state(&channels[i]));
         Self {
             sample_rate: sr,
             max_voices,
             channels,
+            mix,
+            smooth_k: 1.0 - (-1.0 / (CHANNEL_SMOOTH_SEC * sr)).exp(),
             voices: Vec::with_capacity(max_voices),
             drums: Vec::with_capacity(32),
             chorus: StereoChorus::new(sr),
             reverb: HallReverb::new(sr),
-            limiter: MasterLimiter::new(),
-            master_gain: 0.85,
+            hpf_l: SvfFilter::new(),
+            hpf_r: SvfFilter::new(),
+            limiter: MasterLimiter::new(sr),
+            master_gain: DEFAULT_MASTER_GAIN,
             age_counter: 1,
         }
     }
@@ -64,7 +126,7 @@ impl SoundHallEngine {
         self.master_gain = if gain.is_finite() {
             gain.clamp(0.0, 2.5)
         } else {
-            0.85
+            DEFAULT_MASTER_GAIN
         };
     }
 
@@ -134,7 +196,7 @@ impl SoundHallEngine {
         self.ensure_voice_headroom();
 
         let ch = &self.channels[ch_idx];
-        let preset = get_preset(ch.program);
+        let preset = get_bank_preset(ch.bank_msb, ch.program);
         let voice = Voice::new(
             ch_idx as u8,
             note,
@@ -172,6 +234,13 @@ impl SoundHallEngine {
         self.channels[ch_idx].program = program & 0x7F;
     }
 
+    /// Bank Select (CC 0) followed by Program Change: selects any preset, e.g. one from the
+    /// 和楽器 bank (`bank = 1`).
+    pub fn select_bank_program(&mut self, channel: u8, bank: u8, program: u8) {
+        self.control_change(channel, 0, bank);
+        self.program_change(channel, program);
+    }
+
     pub fn control_change(&mut self, channel: u8, cc: u8, value: u8) {
         let ch_idx = (channel & 0x0F) as usize;
         match cc {
@@ -186,6 +255,7 @@ impl SoundHallEngine {
             121 => {
                 // Reset All Controllers also releases any sustained pedal notes on channel
                 self.channels[ch_idx].reset_controllers();
+                self.mix[ch_idx].retarget(&self.channels[ch_idx]);
                 for v in &mut self.voices {
                     if v.channel == ch_idx as u8 && v.sustained && !v.is_finished() {
                         v.release();
@@ -206,7 +276,11 @@ impl SoundHallEngine {
             _ => {}
         }
 
-        if let Some(false) = self.channels[ch_idx].apply_cc(cc, value) {
+        let pedal = self.channels[ch_idx].apply_cc(cc, value);
+        if matches!(cc, 7 | 10 | 11) {
+            self.mix[ch_idx].retarget(&self.channels[ch_idx]);
+        }
+        if let Some(false) = pedal {
             // Sustain pedal released: release all sustained notes on this channel
             for v in &mut self.voices {
                 if v.channel == ch_idx as u8 && v.sustained && !v.is_finished() {
@@ -258,13 +332,22 @@ impl SoundHallEngine {
         self.drums.clear();
         self.chorus.reset();
         self.reverb.reset();
+        self.hpf_l.reset();
+        self.hpf_r.reset();
+        self.limiter.reset();
     }
 
     pub fn reset(&mut self) {
         self.all_sound_off();
         for (i, ch) in self.channels.iter_mut().enumerate() {
             *ch = ChannelState::new(i as u8);
+            self.mix[i] = ChannelMix::from_state(ch);
         }
+    }
+
+    /// Current master limiter gain (1.0 = not limiting); useful for metering.
+    pub fn limiter_gain(&self) -> f32 {
+        self.limiter.gain()
     }
 
     fn ensure_voice_headroom(&mut self) {
@@ -335,6 +418,11 @@ impl SoundHallEngine {
     #[inline]
     fn render_frame(&mut self) -> (f32, f32) {
         let sr = self.sample_rate;
+        let k = self.smooth_k;
+        for m in &mut self.mix {
+            m.tick(k);
+        }
+
         let mut dry_l = 0.0_f32;
         let mut dry_r = 0.0_f32;
         let mut cho_in_l = 0.0_f32;
@@ -346,14 +434,12 @@ impl SoundHallEngine {
             if voice.is_finished() {
                 continue;
             }
-            let ch = &self.channels[voice.channel as usize];
-            let bend_ratio = ch.pitch_bend_ratio();
-            let (vl, vr) = voice.render_sample(sr, bend_ratio, ch.mod_wheel, ch.expression);
-            let (pan_l, pan_r) = equal_power_pan(ch.pan);
-            let gain_l = pan_l * SQRT2 * ch.volume;
-            let gain_r = pan_r * SQRT2 * ch.volume;
-            let sl = vl * gain_l;
-            let sr_out = vr * gain_r;
+            let c = voice.channel as usize;
+            let ch = &self.channels[c];
+            let (vl, vr) = voice.render_sample(sr, ch.pitch_bend_ratio(), ch.mod_wheel, 1.0);
+            let mix = &self.mix[c];
+            let sl = vl * mix.gain_l;
+            let sr_out = vr * mix.gain_r;
 
             dry_l += sl;
             dry_r += sr_out;
@@ -363,21 +449,20 @@ impl SoundHallEngine {
             rev_in_r += sr_out * voice.reverb_send;
         }
 
+        let drum_ch = &self.channels[9];
+        let drum_level = self.mix[9].level * SQRT2;
         for drum in &mut self.drums {
             if drum.is_finished() {
                 continue;
             }
-            let ch = &self.channels[9];
             let d = drum.render_sample(sr);
-            let drum_pan = (drum.pan + (ch.pan - 0.5)).clamp(0.0, 1.0);
-            let (pan_l, pan_r) = equal_power_pan(drum_pan);
-            let amp = ch.volume * ch.expression * SQRT2;
-            let sl = d * pan_l * amp;
-            let sr_out = d * pan_r * amp;
+            let (pan_l, pan_r) = drum.pan_gains(drum_ch.pan);
+            let sl = d * pan_l * drum_level;
+            let sr_out = d * pan_r * drum_level;
 
             dry_l += sl;
             dry_r += sr_out;
-            let rev_amt = ch.reverb_send.max(0.22) * 0.65;
+            let rev_amt = drum_ch.reverb_send * 0.65 * drum.reverb_scale;
             rev_in_l += sl * rev_amt;
             rev_in_r += sr_out * rev_amt;
         }
@@ -385,10 +470,18 @@ impl SoundHallEngine {
         let (cho_l, cho_r) = self.chorus.process(cho_in_l, cho_in_r, sr);
         let (rev_l, rev_r) = self.reverb.process_send(rev_in_l, rev_in_r);
 
-        let mix_l = (dry_l + cho_l + rev_l) * self.master_gain;
-        let mix_r = (dry_r + cho_r + rev_r) * self.master_gain;
+        let bus = self.master_gain * BUS_HEADROOM;
+        let mix_l = (dry_l + cho_l + rev_l) * bus;
+        let mix_r = (dry_r + cho_r + rev_r) * bus;
 
-        (self.limiter.process(mix_l), self.limiter.process(mix_r))
+        let hp_l = self
+            .hpf_l
+            .process(mix_l, MASTER_HPF_HZ, 0.707, sr, SvfMode::HighPass);
+        let hp_r = self
+            .hpf_r
+            .process(mix_r, MASTER_HPF_HZ, 0.707, sr, SvfMode::HighPass);
+
+        self.limiter.process(hp_l, hp_r)
     }
 
     fn prune_finished(&mut self) {

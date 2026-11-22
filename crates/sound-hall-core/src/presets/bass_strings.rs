@@ -18,6 +18,7 @@ pub const PRESETS_32_55: [PresetMetadata; 24] = [
     // 32: Acoustic Bass
     PresetMetadata {
         program: 32,
+        bank: 0,
         name_en: "Acoustic Bass",
         name_ja: "アコースティック・ベース",
         family: GmFamily::Bass,
@@ -44,10 +45,11 @@ pub const PRESETS_32_55: [PresetMetadata; 24] = [
     // 33: Electric Bass (Finger)
     PresetMetadata {
         program: 33,
+        bank: 0,
         name_en: "Electric Bass (Finger)",
         name_ja: "エレクトリック・ベース (フィンガー)",
         family: GmFamily::Bass,
-        gain: 4.39,
+        gain: 4.40,
         default_reverb: 0.14,
         default_chorus: 0.05,
         pitch_range: (28, 67),
@@ -70,6 +72,7 @@ pub const PRESETS_32_55: [PresetMetadata; 24] = [
     // 34: Electric Bass (Pick)
     PresetMetadata {
         program: 34,
+        bank: 0,
         name_en: "Electric Bass (Pick)",
         name_ja: "エレクトリック・ベース (ピック)",
         family: GmFamily::Bass,
@@ -96,10 +99,11 @@ pub const PRESETS_32_55: [PresetMetadata; 24] = [
     // 35: Fretless Bass
     PresetMetadata {
         program: 35,
+        bank: 0,
         name_en: "Fretless Bass",
         name_ja: "フレットレス・ベース",
         family: GmFamily::Bass,
-        gain: 1.02,
+        gain: 4.28,
         default_reverb: 0.20,
         default_chorus: 0.25,
         pitch_range: (28, 72),
@@ -133,10 +137,11 @@ pub const PRESETS_32_55: [PresetMetadata; 24] = [
     // 36: Slap Bass 1
     PresetMetadata {
         program: 36,
+        bank: 0,
         name_en: "Slap Bass 1",
         name_ja: "スラップ・ベース1",
         family: GmFamily::Bass,
-        gain: 3.05,
+        gain: 3.81,
         default_reverb: 0.14,
         default_chorus: 0.05,
         pitch_range: (28, 67),
@@ -157,10 +162,11 @@ pub const PRESETS_32_55: [PresetMetadata; 24] = [
     // 37: Slap Bass 2
     PresetMetadata {
         program: 37,
+        bank: 0,
         name_en: "Slap Bass 2",
         name_ja: "スラップ・ベース2",
         family: GmFamily::Bass,
-        gain: 1.88,
+        gain: 2.34,
         default_reverb: 0.16,
         default_chorus: 0.08,
         pitch_range: (28, 67),
@@ -181,10 +187,11 @@ pub const PRESETS_32_55: [PresetMetadata; 24] = [
     // 38: Synth Bass 1
     PresetMetadata {
         program: 38,
+        bank: 0,
         name_en: "Synth Bass 1",
         name_ja: "シンセベース1",
         family: GmFamily::Bass,
-        gain: 0.93,
+        gain: 4.31,
         default_reverb: 0.12,
         default_chorus: 0.10,
         pitch_range: (24, 67),
@@ -218,10 +225,11 @@ pub const PRESETS_32_55: [PresetMetadata; 24] = [
     // 39: Synth Bass 2
     PresetMetadata {
         program: 39,
+        bank: 0,
         name_en: "Synth Bass 2",
         name_ja: "シンセベース2",
         family: GmFamily::Bass,
-        gain: 0.66,
+        gain: 1.77,
         default_reverb: 0.12,
         default_chorus: 0.15,
         pitch_range: (24, 67),
@@ -255,10 +263,11 @@ pub const PRESETS_32_55: [PresetMetadata; 24] = [
     // 40: Violin
     PresetMetadata {
         program: 40,
+        bank: 0,
         name_en: "Violin",
         name_ja: "ヴァイオリン",
         family: GmFamily::Strings,
-        gain: 1.68,
+        gain: 5.84,
         default_reverb: 0.36,
         default_chorus: 0.06,
         pitch_range: (55, 96),
@@ -267,9 +276,7 @@ pub const PRESETS_32_55: [PresetMetadata; 24] = [
             brightness: 0.78,
             rosin_noise: 0.07,
             ensemble_detune: 0.0,
-            body_specs: [(285.0, 3.2, 0.32), (510.0, 3.8, 0.34), (2350.0, 2.8, 0.24)],
-            body_dry: 0.65,
-            body_wet: 0.42,
+            body_scale: 1.00,
             adsr: AdsrParams::new(0.065, 0.14, 0.88, 0.16),
             vibrato_rate: 5.4,
             vibrato_depth_cents: 13.0,
@@ -279,10 +286,11 @@ pub const PRESETS_32_55: [PresetMetadata; 24] = [
     // 41: Viola
     PresetMetadata {
         program: 41,
+        bank: 0,
         name_en: "Viola",
         name_ja: "ヴィオラ",
         family: GmFamily::Strings,
-        gain: 1.82,
+        gain: 6.56,
         default_reverb: 0.36,
         default_chorus: 0.06,
         pitch_range: (48, 84),
@@ -291,9 +299,7 @@ pub const PRESETS_32_55: [PresetMetadata; 24] = [
             brightness: 0.64,
             rosin_noise: 0.06,
             ensemble_detune: 0.0,
-            body_specs: [(220.0, 3.2, 0.34), (410.0, 3.6, 0.32), (1800.0, 2.6, 0.20)],
-            body_dry: 0.66,
-            body_wet: 0.40,
+            body_scale: 0.82,
             adsr: AdsrParams::new(0.075, 0.15, 0.88, 0.18),
             vibrato_rate: 5.1,
             vibrato_depth_cents: 11.0,
@@ -303,10 +309,11 @@ pub const PRESETS_32_55: [PresetMetadata; 24] = [
     // 42: Cello
     PresetMetadata {
         program: 42,
+        bank: 0,
         name_en: "Cello",
         name_ja: "チェロ",
         family: GmFamily::Strings,
-        gain: 1.63,
+        gain: 5.59,
         default_reverb: 0.36,
         default_chorus: 0.05,
         pitch_range: (36, 76),
@@ -315,9 +322,7 @@ pub const PRESETS_32_55: [PresetMetadata; 24] = [
             brightness: 0.56,
             rosin_noise: 0.055,
             ensemble_detune: 0.0,
-            body_specs: [(128.0, 3.0, 0.36), (245.0, 3.4, 0.32), (1180.0, 2.5, 0.18)],
-            body_dry: 0.68,
-            body_wet: 0.40,
+            body_scale: 0.37,
             adsr: AdsrParams::new(0.085, 0.16, 0.90, 0.20),
             vibrato_rate: 4.8,
             vibrato_depth_cents: 10.0,
@@ -327,10 +332,11 @@ pub const PRESETS_32_55: [PresetMetadata; 24] = [
     // 43: Contrabass
     PresetMetadata {
         program: 43,
+        bank: 0,
         name_en: "Contrabass",
         name_ja: "コントラバス",
         family: GmFamily::Strings,
-        gain: 1.68,
+        gain: 5.98,
         default_reverb: 0.32,
         default_chorus: 0.0,
         pitch_range: (24, 60),
@@ -339,9 +345,7 @@ pub const PRESETS_32_55: [PresetMetadata; 24] = [
             brightness: 0.44,
             rosin_noise: 0.05,
             ensemble_detune: 0.0,
-            body_specs: [(68.0, 2.8, 0.36), (138.0, 3.2, 0.30), (700.0, 2.2, 0.14)],
-            body_dry: 0.70,
-            body_wet: 0.36,
+            body_scale: 0.22,
             adsr: AdsrParams::new(0.10, 0.18, 0.90, 0.22),
             vibrato_rate: 4.2,
             vibrato_depth_cents: 7.0,
@@ -351,10 +355,11 @@ pub const PRESETS_32_55: [PresetMetadata; 24] = [
     // 44: Tremolo Strings
     PresetMetadata {
         program: 44,
+        bank: 0,
         name_en: "Tremolo Strings",
         name_ja: "トレモロ・ストリングス",
         family: GmFamily::Strings,
-        gain: 2.37,
+        gain: 4.49,
         default_reverb: 0.40,
         default_chorus: 0.22,
         pitch_range: (36, 96),
@@ -363,9 +368,7 @@ pub const PRESETS_32_55: [PresetMetadata; 24] = [
             brightness: 0.74,
             rosin_noise: 0.09,
             ensemble_detune: 0.0045,
-            body_specs: [(200.0, 2.6, 0.30), (480.0, 3.0, 0.30), (2100.0, 2.4, 0.22)],
-            body_dry: 0.68,
-            body_wet: 0.36,
+            body_scale: 0.78,
             adsr: AdsrParams::new(0.055, 0.12, 0.88, 0.20),
             vibrato_rate: 5.0,
             vibrato_depth_cents: 8.0,
@@ -375,6 +378,7 @@ pub const PRESETS_32_55: [PresetMetadata; 24] = [
     // 45: Pizzicato Strings
     PresetMetadata {
         program: 45,
+        bank: 0,
         name_en: "Pizzicato Strings",
         name_ja: "ピッツィカート・ストリングス",
         family: GmFamily::Strings,
@@ -401,6 +405,7 @@ pub const PRESETS_32_55: [PresetMetadata; 24] = [
     // 46: Orchestral Harp
     PresetMetadata {
         program: 46,
+        bank: 0,
         name_en: "Orchestral Harp",
         name_ja: "オーケストラル・ハープ",
         family: GmFamily::Strings,
@@ -427,10 +432,11 @@ pub const PRESETS_32_55: [PresetMetadata; 24] = [
     // 47: Timpani
     PresetMetadata {
         program: 47,
+        bank: 0,
         name_en: "Timpani",
         name_ja: "ティンパニ",
         family: GmFamily::Strings,
-        gain: 0.99,
+        gain: 2.29,
         default_reverb: 0.38,
         default_chorus: 0.0,
         pitch_range: (36, 60),
@@ -447,10 +453,11 @@ pub const PRESETS_32_55: [PresetMetadata; 24] = [
     // 48: String Ensemble 1
     PresetMetadata {
         program: 48,
+        bank: 0,
         name_en: "String Ensemble 1",
         name_ja: "ストリングス・アンサンブル1",
         family: GmFamily::Ensemble,
-        gain: 1.66,
+        gain: 3.34,
         default_reverb: 0.44,
         default_chorus: 0.28,
         pitch_range: (36, 96),
@@ -459,9 +466,7 @@ pub const PRESETS_32_55: [PresetMetadata; 24] = [
             brightness: 0.68,
             rosin_noise: 0.05,
             ensemble_detune: 0.0055,
-            body_specs: [(190.0, 2.6, 0.30), (480.0, 3.0, 0.30), (2000.0, 2.4, 0.20)],
-            body_dry: 0.68,
-            body_wet: 0.38,
+            body_scale: 0.78,
             adsr: AdsrParams::new(0.11, 0.20, 0.90, 0.28),
             vibrato_rate: 5.2,
             vibrato_depth_cents: 10.0,
@@ -471,10 +476,11 @@ pub const PRESETS_32_55: [PresetMetadata; 24] = [
     // 49: String Ensemble 2
     PresetMetadata {
         program: 49,
+        bank: 0,
         name_en: "String Ensemble 2",
         name_ja: "ストリングス・アンサンブル2 (スロー)",
         family: GmFamily::Ensemble,
-        gain: 1.60,
+        gain: 3.36,
         default_reverb: 0.48,
         default_chorus: 0.32,
         pitch_range: (36, 96),
@@ -483,9 +489,7 @@ pub const PRESETS_32_55: [PresetMetadata; 24] = [
             brightness: 0.60,
             rosin_noise: 0.04,
             ensemble_detune: 0.0070,
-            body_specs: [(170.0, 2.4, 0.30), (440.0, 2.8, 0.28), (1800.0, 2.2, 0.18)],
-            body_dry: 0.70,
-            body_wet: 0.36,
+            body_scale: 0.74,
             adsr: AdsrParams::new(0.28, 0.24, 0.92, 0.42),
             vibrato_rate: 4.8,
             vibrato_depth_cents: 11.0,
@@ -495,10 +499,11 @@ pub const PRESETS_32_55: [PresetMetadata; 24] = [
     // 50: Synth Strings 1
     PresetMetadata {
         program: 50,
+        bank: 0,
         name_en: "Synth Strings 1",
         name_ja: "シンセストリングス1",
         family: GmFamily::Ensemble,
-        gain: 0.76,
+        gain: 3.09,
         default_reverb: 0.38,
         default_chorus: 0.48,
         pitch_range: (36, 96),
@@ -532,10 +537,11 @@ pub const PRESETS_32_55: [PresetMetadata; 24] = [
     // 51: Synth Strings 2
     PresetMetadata {
         program: 51,
+        bank: 0,
         name_en: "Synth Strings 2",
         name_ja: "シンセストリングス2",
         family: GmFamily::Ensemble,
-        gain: 0.68,
+        gain: 2.39,
         default_reverb: 0.42,
         default_chorus: 0.52,
         pitch_range: (36, 96),
@@ -569,10 +575,11 @@ pub const PRESETS_32_55: [PresetMetadata; 24] = [
     // 52: Choir Aahs
     PresetMetadata {
         program: 52,
+        bank: 0,
         name_en: "Choir Aahs",
         name_ja: "クワイア・アー (合唱)",
         family: GmFamily::Ensemble,
-        gain: 2.33,
+        gain: 11.64,
         default_reverb: 0.52,
         default_chorus: 0.35,
         pitch_range: (48, 84),
@@ -606,10 +613,11 @@ pub const PRESETS_32_55: [PresetMetadata; 24] = [
     // 53: Voice Oohs
     PresetMetadata {
         program: 53,
+        bank: 0,
         name_en: "Voice Oohs",
         name_ja: "ボイス・ウー",
         family: GmFamily::Ensemble,
-        gain: 2.44,
+        gain: 12.19,
         default_reverb: 0.48,
         default_chorus: 0.30,
         pitch_range: (48, 84),
@@ -643,10 +651,11 @@ pub const PRESETS_32_55: [PresetMetadata; 24] = [
     // 54: Synth Voice
     PresetMetadata {
         program: 54,
+        bank: 0,
         name_en: "Synth Voice",
         name_ja: "シンセボイス",
         family: GmFamily::Ensemble,
-        gain: 1.15,
+        gain: 5.64,
         default_reverb: 0.48,
         default_chorus: 0.40,
         pitch_range: (45, 88),
@@ -680,10 +689,11 @@ pub const PRESETS_32_55: [PresetMetadata; 24] = [
     // 55: Orchestra Hit
     PresetMetadata {
         program: 55,
+        bank: 0,
         name_en: "Orchestra Hit",
         name_ja: "オーケストラ・ヒット",
         family: GmFamily::Ensemble,
-        gain: 1.20,
+        gain: 5.41,
         default_reverb: 0.42,
         default_chorus: 0.25,
         pitch_range: (36, 84),

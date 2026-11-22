@@ -5,10 +5,11 @@ pub const PRESETS_16_31: [PresetMetadata; 16] = [
     // 16: Drawbar Organ
     PresetMetadata {
         program: 16,
+        bank: 0,
         name_en: "Drawbar Organ",
         name_ja: "ドローバー・オルガン",
         family: GmFamily::Organ,
-        gain: 1.32,
+        gain: 2.65,
         default_reverb: 0.26,
         default_chorus: 0.25,
         pitch_range: (36, 96),
@@ -27,10 +28,11 @@ pub const PRESETS_16_31: [PresetMetadata; 16] = [
     // 17: Percussive Organ
     PresetMetadata {
         program: 17,
+        bank: 0,
         name_en: "Percussive Organ",
         name_ja: "パーカッシブ・オルガン",
         family: GmFamily::Organ,
-        gain: 1.15,
+        gain: 2.30,
         default_reverb: 0.24,
         default_chorus: 0.18,
         pitch_range: (36, 96),
@@ -49,10 +51,11 @@ pub const PRESETS_16_31: [PresetMetadata; 16] = [
     // 18: Rock Organ
     PresetMetadata {
         program: 18,
+        bank: 0,
         name_en: "Rock Organ",
         name_ja: "ロック・オルガン",
         family: GmFamily::Organ,
-        gain: 0.93,
+        gain: 1.85,
         default_reverb: 0.26,
         default_chorus: 0.20,
         pitch_range: (36, 96),
@@ -71,10 +74,11 @@ pub const PRESETS_16_31: [PresetMetadata; 16] = [
     // 19: Church Organ
     PresetMetadata {
         program: 19,
+        bank: 0,
         name_en: "Church Organ",
         name_ja: "チャーチ・オルガン (パイプオルガン)",
         family: GmFamily::Organ,
-        gain: 0.98,
+        gain: 1.86,
         default_reverb: 0.62,
         default_chorus: 0.15,
         pitch_range: (24, 96),
@@ -93,10 +97,11 @@ pub const PRESETS_16_31: [PresetMetadata; 16] = [
     // 20: Reed Organ
     PresetMetadata {
         program: 20,
+        bank: 0,
         name_en: "Reed Organ",
         name_ja: "リード・オルガン",
         family: GmFamily::Organ,
-        gain: 1.39,
+        gain: 2.77,
         default_reverb: 0.30,
         default_chorus: 0.12,
         pitch_range: (36, 96),
@@ -115,10 +120,11 @@ pub const PRESETS_16_31: [PresetMetadata; 16] = [
     // 21: Accordion
     PresetMetadata {
         program: 21,
+        bank: 0,
         name_en: "Accordion",
         name_ja: "アコーディオン",
         family: GmFamily::Organ,
-        gain: 1.29,
+        gain: 2.59,
         default_reverb: 0.24,
         default_chorus: 0.45,
         pitch_range: (41, 93),
@@ -137,10 +143,11 @@ pub const PRESETS_16_31: [PresetMetadata; 16] = [
     // 22: Harmonica
     PresetMetadata {
         program: 22,
+        bank: 0,
         name_en: "Harmonica",
         name_ja: "ハーモニカ",
         family: GmFamily::Organ,
-        gain: 1.17,
+        gain: 2.34,
         default_reverb: 0.26,
         default_chorus: 0.10,
         pitch_range: (48, 96),
@@ -159,10 +166,11 @@ pub const PRESETS_16_31: [PresetMetadata; 16] = [
     // 23: Tango Accordion
     PresetMetadata {
         program: 23,
+        bank: 0,
         name_en: "Tango Accordion",
         name_ja: "タンゴ・アコーディオン (バンドネオン)",
         family: GmFamily::Organ,
-        gain: 1.14,
+        gain: 2.29,
         default_reverb: 0.26,
         default_chorus: 0.22,
         pitch_range: (36, 93),
@@ -181,6 +189,7 @@ pub const PRESETS_16_31: [PresetMetadata; 16] = [
     // 24: Acoustic Guitar (Nylon)
     PresetMetadata {
         program: 24,
+        bank: 0,
         name_en: "Acoustic Guitar (Nylon)",
         name_ja: "アコースティックギター (ナイロン弦)",
         family: GmFamily::Guitar,
@@ -207,10 +216,11 @@ pub const PRESETS_16_31: [PresetMetadata; 16] = [
     // 25: Acoustic Guitar (Steel)
     PresetMetadata {
         program: 25,
+        bank: 0,
         name_en: "Acoustic Guitar (Steel)",
         name_ja: "アコースティックギター (スティール弦)",
         family: GmFamily::Guitar,
-        gain: 3.69,
+        gain: 3.70,
         default_reverb: 0.28,
         default_chorus: 0.10,
         pitch_range: (40, 91),
@@ -233,6 +243,7 @@ pub const PRESETS_16_31: [PresetMetadata; 16] = [
     // 26: Electric Guitar (Jazz)
     PresetMetadata {
         program: 26,
+        bank: 0,
         name_en: "Electric Guitar (Jazz)",
         name_ja: "エレクトリックギター (ジャズ)",
         family: GmFamily::Guitar,
@@ -259,6 +270,7 @@ pub const PRESETS_16_31: [PresetMetadata; 16] = [
     // 27: Electric Guitar (Clean)
     PresetMetadata {
         program: 27,
+        bank: 0,
         name_en: "Electric Guitar (Clean)",
         name_ja: "エレクトリックギター (クリーン)",
         family: GmFamily::Guitar,
@@ -285,10 +297,11 @@ pub const PRESETS_16_31: [PresetMetadata; 16] = [
     // 28: Electric Guitar (Muted)
     PresetMetadata {
         program: 28,
+        bank: 0,
         name_en: "Electric Guitar (Muted)",
         name_ja: "エレクトリックギター (ミュート)",
         family: GmFamily::Guitar,
-        gain: 8.90,
+        gain: 7.95,
         default_reverb: 0.18,
         default_chorus: 0.10,
         pitch_range: (40, 84),
@@ -311,6 +324,7 @@ pub const PRESETS_16_31: [PresetMetadata; 16] = [
     // 29: Overdriven Guitar
     PresetMetadata {
         program: 29,
+        bank: 0,
         name_en: "Overdriven Guitar",
         name_ja: "オーバードライブ・ギター",
         family: GmFamily::Guitar,
@@ -337,6 +351,7 @@ pub const PRESETS_16_31: [PresetMetadata; 16] = [
     // 30: Distortion Guitar
     PresetMetadata {
         program: 30,
+        bank: 0,
         name_en: "Distortion Guitar",
         name_ja: "ディストーション・ギター",
         family: GmFamily::Guitar,
@@ -363,6 +378,7 @@ pub const PRESETS_16_31: [PresetMetadata; 16] = [
     // 31: Guitar Harmonics
     PresetMetadata {
         program: 31,
+        bank: 0,
         name_en: "Guitar Harmonics",
         name_ja: "ギター・ハーモニクス",
         family: GmFamily::Guitar,

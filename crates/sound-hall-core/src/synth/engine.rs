@@ -2,7 +2,7 @@ use crate::dsp::effects::{HallReverb, MasterLimiter, StereoChorus};
 use crate::dsp::filter::{SvfFilter, SvfMode};
 use crate::dsp::math::equal_power_pan;
 use crate::midi::event::MidiEvent;
-use crate::presets::{get_drum_patch, get_preset};
+use crate::presets::{get_bank_preset, get_drum_patch};
 
 use super::channel::ChannelState;
 use super::drum::DrumVoice;
@@ -196,7 +196,7 @@ impl SoundHallEngine {
         self.ensure_voice_headroom();
 
         let ch = &self.channels[ch_idx];
-        let preset = get_preset(ch.program);
+        let preset = get_bank_preset(ch.bank_msb, ch.program);
         let voice = Voice::new(
             ch_idx as u8,
             note,
@@ -232,6 +232,13 @@ impl SoundHallEngine {
     pub fn program_change(&mut self, channel: u8, program: u8) {
         let ch_idx = (channel & 0x0F) as usize;
         self.channels[ch_idx].program = program & 0x7F;
+    }
+
+    /// Bank Select (CC 0) followed by Program Change: selects any preset, e.g. one from the
+    /// 和楽器 bank (`bank = 1`).
+    pub fn select_bank_program(&mut self, channel: u8, bank: u8, program: u8) {
+        self.control_change(channel, 0, bank);
+        self.program_change(channel, program);
     }
 
     pub fn control_change(&mut self, channel: u8, cc: u8, value: u8) {

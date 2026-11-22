@@ -2,6 +2,8 @@
 #[derive(Clone, Debug)]
 pub struct ChannelState {
     pub program: u8,
+    /// Bank Select MSB (CC 0); selects the preset bank applied at the next note-on.
+    pub bank_msb: u8,
     pub is_drum: bool,
     pub volume: f32,
     pub pan: f32,
@@ -24,6 +26,7 @@ impl ChannelState {
     pub fn new(channel_idx: u8) -> Self {
         Self {
             program: 0,
+            bank_msb: 0,
             is_drum: channel_idx == 9,
             volume: 100.0 / 127.0,
             pan: 0.5,
@@ -82,6 +85,7 @@ impl ChannelState {
     pub fn apply_cc(&mut self, cc: u8, value: u8) -> Option<bool> {
         let norm = (value.min(127) as f32) / 127.0;
         match cc {
+            0 => self.bank_msb = value.min(127),
             1 => self.mod_wheel = norm,
             7 => self.volume = norm,
             10 => self.pan = (value.min(127) as f32) / 127.0,

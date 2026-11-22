@@ -13,7 +13,9 @@ pub mod wav;
 pub use midi::event::{MidiEvent, MidiSong, TimedEvent};
 pub use midi::smf::{parse_smf, MidiSequencer, SmfError};
 pub use presets::{
-    all_drums, all_presets, find_preset, get_drum_info, get_drum_patch, get_preset, search_presets,
+    all_bank_presets, all_drums, all_presets, bank_presets, find_preset, get_bank_preset,
+    get_drum_info, get_drum_patch, get_preset, search_presets, wagakki_presets, WAGAKKI_BANK,
+    WAGAKKI_COUNT,
 };
 pub use score::demos::{get_demo, list_demos, parse_demo, DemoSong};
 pub use score::{parse_score, ScoreError};

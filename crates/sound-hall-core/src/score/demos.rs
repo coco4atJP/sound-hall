@@ -168,7 +168,69 @@ l8 v86
 [36,49]4 38:4 [36,57]2
 "#;
 
-pub static DEMO_SONGS: [DemoSong; 5] = [
+const DEMO_MATSURI: &str = r#"
+tempo 126
+
+track Hyoshigi ch=0 program=拍子木 vol=94 pan=64 rev=40
+o6 l4 q4 v118
+c4 r4 c8 c8 r4 | r1 | r1 | r1 | r1 | r1 | r1 | r1 | r1 | c4 r4 c4 r4
+
+track Shinobue ch=1 program=篠笛 vol=100 pan=58 rev=44
+o5 l8 q7 v96
+r1 |
+d8 e8 g8 a8 b4 a8 g8 | a8 b8 >d8 e8 d4< b8 a8 | g8 a8 b8 a8 g8 e8 d8 e8 | g2 a4 r4 |
+b8 >d8 e8 d8< b4 a8 g8 | a8 g8 e8 g8 a4 b8 a8 | g8 e8 d8 e8 g8 a8 g8 e8 | d2. r4 |
+r1
+
+track Shime ch=2 program=締太鼓 vol=84 pan=44 rev=30
+o4 l8 q5 v100
+r1 | (e8 e8 e16 e16 e8 e8 e8 e16 e16 e8)*8 | e4 r4 e4 r4
+
+track Nagado ch=3 program=長胴太鼓 vol=94 pan=64 rev=36
+o2 l4 q6 v110
+g2 r2 | (g4 r8 g8 g8 g8 r4)*7 g8 g8 g8 g8 g4 g4 | g4 r4 g4 r4
+
+track Atarigane ch=4 program=当り鉦 vol=78 pan=80 rev=30
+o6 l8 q5 v92
+r1 | (c8 c16 c16 c8 c16 c16 c8 c16 c16 c8 c16 c16)*8 | c4 r4 c4 r4
+
+track Tsugaru ch=5 program=津軽三味線 vol=94 pan=36 rev=26
+o4 l8 q6 v104
+r1 | (d8 r8 a8 d8 >d8< a8 g8 a8 | d8 r8 a8 >d8 e8 d8< b8 a8)*4 | d4 r4 d4 r4
+"#;
+
+const DEMO_GAGAKU: &str = r#"
+tempo 56
+
+track Sho ch=0 program=笙 vol=82 pan=64 rev=62
+o5 l1 q8 v80
+[e f# a b]1 | [e a b >e<]1 | [d# e f# b]1 | [e f# a b]1 |
+[f# a b >e<]1 | [e f# a b]1 | [d# e a b]1 | [e f# a b >e<]1
+
+track Hichiriki ch=1 program=篳篥 vol=100 pan=56 rev=54
+o4 l4 q8 v94
+e2 f#4 a4 | b2. a4 | f#2 e4 f#4 | e1 |
+a2 b4 >c#4< | b2 a4 f#4 | e2 f#4 a4 | e1
+
+track Ryuteki ch=2 program=龍笛 vol=86 pan=72 rev=58
+o5 l4 q8 v86
+e2 f#8 e8 a4 | b2. a8 b8 | f#2 e4 f#4 | e1 |
+a2 b8 a8 >c#4< | b2 a4 f#4 | e2 f#8 e8 a4 | e1
+
+track Gakuso ch=3 program=楽箏 vol=90 pan=40 rev=52
+o3 l4 q8 v84
+([e b]4 >e4 f#8 e8< b4 | [a >e<]4 >a4 b8 a8 e4<)*4
+
+track Kakko ch=4 program=締太鼓 vol=64 pan=28 rev=48
+o4 l16 q5 v62
+(r1 | r2 e16 e16 e16 e16 e16 e16 e16 e16)*4
+
+track Taiko ch=5 program=長胴太鼓 vol=96 pan=64 rev=60
+o2 l4 q6 v100
+r1 | r1 | r1 | v70 g4 r4 v112 g2 | r1 | r1 | r1 | v70 g4 r4 v116 g2
+"#;
+
+pub static DEMO_SONGS: [DemoSong; 7] = [
     DemoSong {
         id: "orchestra",
         title_en: "Symphonic Dawn",
@@ -189,6 +251,20 @@ pub static DEMO_SONGS: [DemoSong; 5] = [
         title_ja: "桜と竹 (和楽器アンサンブル)",
         description: "Koto, Shakuhachi, Shamisen, Taiko Drum & Slow Strings",
         score: DEMO_WAGAKKI,
+    },
+    DemoSong {
+        id: "matsuri",
+        title_en: "Festival Drums",
+        title_ja: "祭囃子 (和楽器バンク)",
+        description: "Shinobue, Shime & Nagado Taiko, Atarigane, Tsugaru Shamisen & Hyoshigi",
+        score: DEMO_MATSURI,
+    },
+    DemoSong {
+        id: "gagaku",
+        title_en: "Court Music",
+        title_ja: "雅楽 (和楽器バンク)",
+        description: "Sho, Hichiriki, Ryuteki, Gakuso, Kakko & Taiko",
+        score: DEMO_GAGAKU,
     },
     DemoSong {
         id: "electronic",

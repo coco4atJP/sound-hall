@@ -345,6 +345,7 @@ pub fn parse_score(source: &str) -> Result<MidiSong, ScoreError> {
             let raw_name = parts.get(1).copied().unwrap_or("Track");
             let mut channel: u8 = (track_names.len() as u8) % 16;
             let mut program: Option<u8> = None;
+            let mut bank: Option<u8> = None;
             let mut vol: Option<u8> = None;
             let mut pan: Option<u8> = None;
             let mut rev: Option<u8> = None;
@@ -359,11 +360,19 @@ pub fn parse_score(source: &str) -> Result<MidiSong, ScoreError> {
                                 ScoreError::new(line_no, format!("invalid channel '{v}'"))
                             })? & 0x0F;
                         }
+                        "bank" => {
+                            bank = Some(
+                                v.parse::<u8>().map_err(|_| {
+                                    ScoreError::new(line_no, format!("invalid bank '{v}'"))
+                                })? & 0x7F,
+                            );
+                        }
                         "prog" | "program" => {
                             if let Ok(p) = v.parse::<u8>() {
                                 program = Some(p & 0x7F);
                             } else if let Some(preset) = find_preset(v) {
                                 program = Some(preset.program);
+                                bank.get_or_insert(preset.bank);
                             } else {
                                 return Err(ScoreError::new(
                                     line_no,
@@ -392,6 +401,15 @@ pub fn parse_score(source: &str) -> Result<MidiSong, ScoreError> {
             track_names.push(name.clone());
             if let Some(p) = program {
                 if channel != 9 {
+                    // Bank Select MSB first (0 = General MIDI, 1 = 和楽器)
+                    events.push(TimedEvent {
+                        time_sec: 0.0,
+                        event: MidiEvent::ControlChange {
+                            channel,
+                            cc: 0,
+                            value: bank.unwrap_or(0),
+                        },
+                    });
                     events.push(TimedEvent {
                         time_sec: 0.0,
                         event: MidiEvent::ProgramChange {

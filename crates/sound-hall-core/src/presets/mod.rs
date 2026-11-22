@@ -4,6 +4,7 @@ pub mod drums;
 pub mod organ_guitar;
 pub mod piano_chromatic;
 pub mod synth_ethnic_sfx;
+pub mod wagakki;
 
 use crate::synth::drum::DrumPatch;
 use crate::synth::patch::PresetMetadata;
@@ -14,6 +15,8 @@ use drums::GM_DRUMS;
 use organ_guitar::PRESETS_16_31;
 use piano_chromatic::PRESETS_0_15;
 use synth_ethnic_sfx::PRESETS_80_127;
+use wagakki::WAGAKKI_PRESETS;
+pub use wagakki::{WAGAKKI_BANK, WAGAKKI_COUNT};
 
 const fn build_all_presets() -> [PresetMetadata; 128] {
     // Placeholder element replaced cleanly via loop in const context
@@ -59,8 +62,36 @@ pub fn get_preset(program: u8) -> &'static PresetMetadata {
     &ALL_PRESETS[(program & 0x7F) as usize]
 }
 
-/// Searches for a single preset matching either program number (0..127), English name,
-/// or Japanese name (exact match preferred, otherwise first substring match).
+/// Returns the 和楽器 (Japanese traditional instrument) bank — Bank Select MSB 1.
+pub fn wagakki_presets() -> &'static [PresetMetadata; WAGAKKI_COUNT] {
+    &WAGAKKI_PRESETS
+}
+
+/// Returns the presets of bank `bank` (0 = General MIDI, 1 = 和楽器; empty otherwise).
+pub fn bank_presets(bank: u8) -> &'static [PresetMetadata] {
+    match bank {
+        0 => &ALL_PRESETS,
+        WAGAKKI_BANK => &WAGAKKI_PRESETS,
+        _ => &[],
+    }
+}
+
+/// Every preset of every bank: the 128 General MIDI programs followed by the 和楽器 bank.
+pub fn all_bank_presets() -> impl Iterator<Item = &'static PresetMetadata> {
+    ALL_PRESETS.iter().chain(WAGAKKI_PRESETS.iter())
+}
+
+/// Bank-aware lookup (Bank Select MSB + Program Change). Programs that do not exist in the
+/// selected bank fall back to the General MIDI program, like GS/XG sound modules do.
+pub fn get_bank_preset(bank: u8, program: u8) -> &'static PresetMetadata {
+    bank_presets(bank)
+        .get((program & 0x7F) as usize)
+        .unwrap_or_else(|| get_preset(program))
+}
+
+/// Searches for a single preset matching either a GM program number (0..127), English name,
+/// or Japanese name across all banks (exact match preferred, General MIDI first, otherwise
+/// first substring match).
 pub fn find_preset(query: &str) -> Option<&'static PresetMetadata> {
     let q = query.trim();
     if q.is_empty() {
@@ -72,25 +103,27 @@ pub fn find_preset(query: &str) -> Option<&'static PresetMetadata> {
         }
     }
     let q_lower = q.to_lowercase();
-    if let Some(exact) = ALL_PRESETS
-        .iter()
-        .find(|p| p.name_en.to_lowercase() == q_lower || p.name_ja == q)
+    if let Some(exact) =
+        all_bank_presets().find(|p| p.name_en.to_lowercase() == q_lower || p.name_ja == q)
     {
         return Some(exact);
     }
-    ALL_PRESETS
-        .iter()
+    all_bank_presets()
         .find(|p| p.name_en.to_lowercase().contains(&q_lower) || p.name_ja.contains(q))
 }
 
-/// Returns all presets whose English/Japanese name or family matches `query`.
+/// Returns all presets (all banks) whose English/Japanese name or family matches `query`.
+/// `"wagakki"` / `"和楽器"` lists the whole 和楽器 bank.
 pub fn search_presets(query: &str) -> Vec<&'static PresetMetadata> {
     let q = query.trim();
     let q_lower = q.to_lowercase();
-    ALL_PRESETS
-        .iter()
+    let bank_match = |p: &PresetMetadata| {
+        p.bank == WAGAKKI_BANK && (q_lower.contains("wagakki") || q.contains("和楽器"))
+    };
+    all_bank_presets()
         .filter(|p| {
-            p.name_en.to_lowercase().contains(&q_lower)
+            bank_match(p)
+                || p.name_en.to_lowercase().contains(&q_lower)
                 || p.name_ja.contains(q)
                 || p.family.name_en().to_lowercase().contains(&q_lower)
                 || p.family.name_ja().contains(q)
@@ -129,11 +162,33 @@ mod tests {
     use super::*;
 
     #[test]
+    fn bank_lookup_and_names() {
+        assert_eq!(get_bank_preset(0, 107).name_en, "Koto");
+        assert_eq!(get_bank_preset(WAGAKKI_BANK, 0).name_ja, "琵琶");
+        // Unknown program in a bank and unknown banks fall back to General MIDI
+        assert_eq!(get_bank_preset(WAGAKKI_BANK, 120).program, 120);
+        assert_eq!(get_bank_preset(9, 3).bank, 0);
+        // GM names win exact matches; 和楽器 names are found by Japanese and English name
+        assert_eq!(find_preset("koto").unwrap().bank, 0);
+        assert_eq!(find_preset("篳篥").unwrap().bank, WAGAKKI_BANK);
+        assert_eq!(find_preset("shinobue").unwrap().name_ja, "篠笛");
+        assert_eq!(search_presets("和楽器").len(), WAGAKKI_COUNT);
+    }
+
+    #[test]
     fn preset_table_indices_are_contiguous() {
         for (i, p) in ALL_PRESETS.iter().enumerate() {
             assert_eq!(p.program as usize, i);
             assert!(!p.name_en.is_empty());
             assert!(!p.name_ja.is_empty());
+        }
+        for (i, p) in WAGAKKI_PRESETS.iter().enumerate() {
+            assert_eq!(p.program as usize, i);
+            assert_eq!(p.bank, WAGAKKI_BANK);
+            assert!(!p.name_en.is_empty() && !p.name_ja.is_empty());
+        }
+        for p in ALL_PRESETS.iter() {
+            assert_eq!(p.bank, 0);
         }
         for (i, d) in GM_DRUMS.iter().enumerate() {
             assert_eq!(d.note as usize, 35 + i);

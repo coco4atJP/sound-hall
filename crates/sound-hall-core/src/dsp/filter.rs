@@ -341,6 +341,7 @@ pub struct BodyResonator {
     bands: [BiquadResonator; 3],
     dry_mix: f32,
     wet_mix: f32,
+    active: bool,
 }
 
 impl BodyResonator {
@@ -361,6 +362,7 @@ impl BodyResonator {
             bands,
             dry_mix,
             wet_mix,
+            active: wet_mix != 0.0,
         }
     }
 
@@ -372,8 +374,84 @@ impl BodyResonator {
 
     #[inline]
     pub fn process(&mut self, x: f32) -> f32 {
+        if !self.active {
+            return x * self.dry_mix;
+        }
         let res = self.bands[0].process(x) + self.bands[1].process(x) + self.bands[2].process(x);
         x * self.dry_mix + res * self.wet_mix
+    }
+}
+
+/// Maximum number of peaking resonances in an [`InstrumentBody`].
+pub const MAX_BODY_PEAKS: usize = 8;
+
+/// Multi-resonance instrument body / bell radiation filter: a 2nd-order high-pass (weak
+/// radiation below the lowest body mode), up to eight peaking resonances (body modes,
+/// formants, bridge hill) and a 2nd-order low-pass, in series.
+#[derive(Clone, Debug)]
+pub struct InstrumentBody {
+    hp: SvfFilter,
+    lp: SvfFilter,
+    hp_hz: f32,
+    lp_hz: f32,
+    peaks: [BiquadResonator; MAX_BODY_PEAKS],
+    count: usize,
+    sr: f32,
+}
+
+impl InstrumentBody {
+    /// `peaks` are `(frequency Hz, Q, gain dB)`; `hp_hz`/`lp_hz` <= 0 disable those stages.
+    pub fn new(hp_hz: f32, lp_hz: f32, peaks: &[(f32, f32, f32)], sr: f32) -> Self {
+        let sr = sr.max(8000.0);
+        let mut bank: [BiquadResonator; MAX_BODY_PEAKS] =
+            core::array::from_fn(|_| BiquadResonator::default());
+        let mut count = 0;
+        for &(f, q, g) in peaks.iter().take(MAX_BODY_PEAKS) {
+            if f > 20.0 && f < 0.45 * sr && g.abs() > 0.05 {
+                bank[count].set_peaking(f, q, g, sr);
+                count += 1;
+            }
+        }
+        Self {
+            hp: SvfFilter::new(),
+            lp: SvfFilter::new(),
+            hp_hz,
+            lp_hz: if lp_hz > 0.0 {
+                lp_hz.min(0.45 * sr)
+            } else {
+                0.0
+            },
+            peaks: bank,
+            count,
+            sr,
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.hp.reset();
+        self.lp.reset();
+        for p in &mut self.peaks {
+            p.reset();
+        }
+    }
+
+    #[inline]
+    pub fn process(&mut self, x: f32) -> f32 {
+        let mut y = x;
+        if self.hp_hz > 0.0 {
+            y = self
+                .hp
+                .process(y, self.hp_hz, 0.75, self.sr, SvfMode::HighPass);
+        }
+        for p in &mut self.peaks[..self.count] {
+            y = p.process(y);
+        }
+        if self.lp_hz > 0.0 {
+            y = self
+                .lp
+                .process(y, self.lp_hz, 0.7, self.sr, SvfMode::LowPass);
+        }
+        y
     }
 }
 

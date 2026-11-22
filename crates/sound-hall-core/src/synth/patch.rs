@@ -2,7 +2,7 @@ use crate::dsp::envelope::AdsrParams;
 use crate::dsp::filter::{FormantPreset, SvfMode};
 use crate::dsp::modal::ModeSpec;
 use crate::dsp::oscillator::Waveform;
-use crate::dsp::waveguide::WindType;
+use crate::dsp::waveguide::{WindType, WindVoicing};
 
 /// General MIDI instrument family (16 standard groups of 8 instruments each).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -127,10 +127,12 @@ pub struct BowedParams {
     pub bow_pressure: f32,
     pub brightness: f32,
     pub rosin_noise: f32,
+    /// Section pitch spread (frequency ratio). Non-zero turns the voice into a 4-player
+    /// section with individual tuning, vibrato and bow timing.
     pub ensemble_detune: f32,
-    pub body_specs: [(f32, f32, f32); 3],
-    pub body_dry: f32,
-    pub body_wet: f32,
+    /// Violin-family body size relative to a violin (violin 1.0, viola ~0.82, cello ~0.37,
+    /// contrabass ~0.22): scales the measured body-mode template.
+    pub body_scale: f32,
     pub adsr: AdsrParams,
     pub vibrato_rate: f32,
     pub vibrato_depth_cents: f32,
@@ -152,6 +154,8 @@ pub struct WindParams {
     pub vibrato_rate: f32,
     pub vibrato_depth_cents: f32,
     pub drone_fifth: bool,
+    /// Instrument voicing: spectral roll-off, dynamic brightness, radiation and formants.
+    pub voicing: WindVoicing,
 }
 
 /// Parameters for damped modal percussion resonators.
@@ -298,6 +302,8 @@ impl SynthEngineKind {
 #[derive(Clone, Copy, Debug)]
 pub struct PresetMetadata {
     pub program: u8,
+    /// MIDI bank (CC 0 / Bank Select MSB): 0 = General MIDI, 1 = SoundHall 和楽器 bank.
+    pub bank: u8,
     pub name_en: &'static str,
     pub name_ja: &'static str,
     pub family: GmFamily,

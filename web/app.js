@@ -148,6 +148,57 @@ const GM_PRESETS = [
   [127, "Gunshot", "銃声 (ガンショット)", "Sound Effects", "FormantSubtractive", 46, 0],
 ];
 
+/** SoundHall 和楽器 Bank (Bank Select MSB 1): [prog, en, ja, family, engine, rev, cho, previewNote] */
+const WAGAKKI_BANK = 1;
+const WAGAKKI_PRESETS = [
+  [0, "Biwa", "琵琶", "Ethnic", "PluckedString", 38, 0, 52],
+  [1, "Jushichigen (Bass Koto)", "十七絃", "Ethnic", "PluckedString", 40, 0, 43],
+  [2, "Tsugaru Shamisen", "津軽三味線", "Ethnic", "PluckedString", 28, 0, 57],
+  [3, "Taishogoto", "大正琴", "Ethnic", "PluckedString", 34, 0, 72],
+  [4, "Gakuso (Gagaku Koto)", "楽箏", "Ethnic", "PluckedString", 42, 0, 64],
+  [5, "Kokyu", "胡弓", "Strings", "BowedString", 40, 0, 69],
+  [6, "Shinobue", "篠笛", "Pipe", "WindBore", 40, 0, 79],
+  [7, "Ryuteki", "龍笛", "Pipe", "WindBore", 46, 0, 76],
+  [8, "Nokan", "能管", "Pipe", "WindBore", 42, 0, 81],
+  [9, "Hichiriki", "篳篥", "Reed", "WindBore", 44, 0, 69],
+  [10, "Sho", "笙", "Organ", "AdditiveOrgan", 50, 0, 76],
+  [11, "Horagai (Conch)", "法螺貝", "Brass", "WindBore", 46, 0, 50],
+  [12, "Shakuhachi (Muraiki)", "尺八 (ムラ息)", "Pipe", "WindBore", 46, 0, 62],
+  [13, "Nagado-daiko", "長胴太鼓", "Percussive", "ModalPercussion", 34, 0, 38],
+  [14, "Shime-daiko", "締太鼓", "Percussive", "ModalPercussion", 28, 0, 64],
+  [15, "O-daiko", "大太鼓", "Percussive", "ModalPercussion", 40, 0, 31],
+  [16, "Kotsuzumi", "小鼓", "Percussive", "ModalPercussion", 36, 0, 67],
+  [17, "Otsuzumi", "大鼓", "Percussive", "ModalPercussion", 30, 0, 72],
+  [18, "Atarigane", "当り鉦", "Chromatic Percussion", "ModalPercussion", 30, 0, 84],
+  [19, "Hyoshigi", "拍子木", "Percussive", "ModalPercussion", 32, 0, 84],
+  [20, "Mokugyo", "木魚", "Percussive", "ModalPercussion", 34, 0, 60],
+  [21, "Rin (Singing Bowl)", "りん", "Chromatic Percussion", "ModalPercussion", 50, 0, 79],
+  [22, "Suzu (Shrine Bells)", "鈴", "Chromatic Percussion", "ModalPercussion", 38, 0, 88],
+];
+
+/** Unified instrument catalog across banks (0 = General MIDI, 1 = 和楽器). */
+const CATALOG = [
+  ...GM_PRESETS.map(([prog, en, ja, fam, eng, rev, cho]) => ({
+    bank: 0, prog, en, ja, fam, eng, rev, cho, preview: 60,
+  })),
+  ...WAGAKKI_PRESETS.map(([prog, en, ja, fam, eng, rev, cho, preview]) => ({
+    bank: WAGAKKI_BANK, prog, en, ja, fam, eng, rev, cho, preview,
+  })),
+];
+
+function findPreset(bank, prog) {
+  return (
+    CATALOG.find((p) => p.bank === bank && p.prog === prog) ??
+    CATALOG.find((p) => p.bank === 0 && p.prog === (prog & 0x7f))
+  );
+}
+
+function presetLabel(p) {
+  return p.bank === 0
+    ? `#${String(p.prog).padStart(3, "0")}`
+    : `和${String(p.prog).padStart(2, "0")}`;
+}
+
 /** Complete 47 General MIDI Standard Drum Kit Voices (Notes 35..81) */
 const GM_DRUMS = [
   [35, "Acoustic Bass Drum", "アコースティック・バスドラム", ""],
@@ -355,10 +406,72 @@ track Drums ch=9 vol=88 pan=64 rev=24
 l8 v86
 ([36,42]8 42:8 [38,42]8 42:8 [36,42]8 42:8 [38,42]8 46:8)*3
 [36,49]4 38:4 [36,57]2`,
+  // 5: Matsuri (和楽器バンク)
+  `# Festival Drums (祭囃子・和楽器バンク)
+tempo 126
+
+track Hyoshigi ch=0 program=拍子木 vol=94 pan=64 rev=40
+o6 l4 q4 v118
+c4 r4 c8 c8 r4 | r1 | r1 | r1 | r1 | r1 | r1 | r1 | r1 | c4 r4 c4 r4
+
+track Shinobue ch=1 program=篠笛 vol=100 pan=58 rev=44
+o5 l8 q7 v96
+r1 |
+d8 e8 g8 a8 b4 a8 g8 | a8 b8 >d8 e8 d4< b8 a8 | g8 a8 b8 a8 g8 e8 d8 e8 | g2 a4 r4 |
+b8 >d8 e8 d8< b4 a8 g8 | a8 g8 e8 g8 a4 b8 a8 | g8 e8 d8 e8 g8 a8 g8 e8 | d2. r4 |
+r1
+
+track Shime ch=2 program=締太鼓 vol=84 pan=44 rev=30
+o4 l8 q5 v100
+r1 | (e8 e8 e16 e16 e8 e8 e8 e16 e16 e8)*8 | e4 r4 e4 r4
+
+track Nagado ch=3 program=長胴太鼓 vol=94 pan=64 rev=36
+o2 l4 q6 v110
+g2 r2 | (g4 r8 g8 g8 g8 r4)*7 g8 g8 g8 g8 g4 g4 | g4 r4 g4 r4
+
+track Atarigane ch=4 program=当り鉦 vol=78 pan=80 rev=30
+o6 l8 q5 v92
+r1 | (c8 c16 c16 c8 c16 c16 c8 c16 c16 c8 c16 c16)*8 | c4 r4 c4 r4
+
+track Tsugaru ch=5 program=津軽三味線 vol=94 pan=36 rev=26
+o4 l8 q6 v104
+r1 | (d8 r8 a8 d8 >d8< a8 g8 a8 | d8 r8 a8 >d8 e8 d8< b8 a8)*4 | d4 r4 d4 r4`,
+  // 6: Gagaku (和楽器バンク)
+  `# Court Music (雅楽・和楽器バンク)
+tempo 56
+
+track Sho ch=0 program=笙 vol=82 pan=64 rev=62
+o5 l1 q8 v80
+[e f# a b]1 | [e a b >e<]1 | [d# e f# b]1 | [e f# a b]1 |
+[f# a b >e<]1 | [e f# a b]1 | [d# e a b]1 | [e f# a b >e<]1
+
+track Hichiriki ch=1 program=篳篥 vol=100 pan=56 rev=54
+o4 l4 q8 v94
+e2 f#4 a4 | b2. a4 | f#2 e4 f#4 | e1 |
+a2 b4 >c#4< | b2 a4 f#4 | e2 f#4 a4 | e1
+
+track Ryuteki ch=2 program=龍笛 vol=86 pan=72 rev=58
+o5 l4 q8 v86
+e2 f#8 e8 a4 | b2. a8 b8 | f#2 e4 f#4 | e1 |
+a2 b8 a8 >c#4< | b2 a4 f#4 | e2 f#8 e8 a4 | e1
+
+track Gakuso ch=3 program=楽箏 vol=90 pan=40 rev=52
+o3 l4 q8 v84
+([e b]4 >e4 f#8 e8< b4 | [a >e<]4 >a4 b8 a8 e4<)*4
+
+track Kakko ch=4 program=締太鼓 vol=64 pan=28 rev=48
+o4 l16 q5 v62
+(r1 | r2 e16 e16 e16 e16 e16 e16 e16 e16)*4
+
+track Taiko ch=5 program=長胴太鼓 vol=96 pan=64 rev=60
+o2 l4 q6 v100
+r1 | r1 | r1 | v70 g4 r4 v112 g2 | r1 | r1 | r1 | v70 g4 r4 v116 g2`,
 ];
 
+const WAGAKKI_FAMILY = "和楽器";
 const FAMILIES = [
   "All",
+  WAGAKKI_FAMILY,
   "Piano",
   "Chromatic Percussion",
   "Organ",
@@ -410,6 +523,7 @@ class SoundHallStudioApp {
     this.analyser = null;
     this.scriptNode = null;
 
+    this.selectedBank = 0;
     this.selectedProgram = 0;
     this.selectedFamily = "All";
     this.searchQuery = "";
@@ -550,7 +664,7 @@ class SoundHallStudioApp {
       this.synth.dispose();
     }
     this.synth = await SoundHallWasm.instantiate(this.wasmBytes, sr, 64);
-    this.synth.programChange(0, this.selectedProgram);
+    this.applySelectedPreset();
     this.synth.setMasterGain(Number(this.sliderVolume.value) / 100);
     this.synth.setReverbMix(Number(this.sliderReverb.value) / 100);
     this.synth.setChorusMix(Number(this.sliderChorus.value) / 100);
@@ -591,7 +705,12 @@ class SoundHallStudioApp {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = `family-chip${fam === this.selectedFamily ? " active" : ""}`;
-      btn.textContent = fam === "All" ? "All (128)" : fam;
+      btn.textContent =
+        fam === "All"
+          ? `All (${CATALOG.length})`
+          : fam === WAGAKKI_FAMILY
+            ? `${WAGAKKI_FAMILY} (${WAGAKKI_PRESETS.length})`
+            : fam;
       btn.addEventListener("click", () => {
         this.selectedFamily = fam;
         for (const c of this.elFamilyChips.children) {
@@ -605,31 +724,36 @@ class SoundHallStudioApp {
 
   renderInstrumentList() {
     const q = this.searchQuery.trim().toLowerCase();
-    const filtered = GM_PRESETS.filter(([prog, en, ja, fam, eng]) => {
-      if (this.selectedFamily !== "All" && fam !== this.selectedFamily) {
+    const filtered = CATALOG.filter((p) => {
+      if (this.selectedFamily === WAGAKKI_FAMILY) {
+        if (p.bank !== WAGAKKI_BANK) return false;
+      } else if (this.selectedFamily !== "All" && p.fam !== this.selectedFamily) {
         return false;
       }
       if (!q) return true;
       return (
-        String(prog) === q ||
-        `#${String(prog).padStart(3, "0")}`.includes(q) ||
-        en.toLowerCase().includes(q) ||
-        ja.toLowerCase().includes(q) ||
-        fam.toLowerCase().includes(q) ||
-        eng.toLowerCase().includes(q)
+        (p.bank === 0 && String(p.prog) === q) ||
+        presetLabel(p).toLowerCase().includes(q) ||
+        p.en.toLowerCase().includes(q) ||
+        p.ja.toLowerCase().includes(q) ||
+        p.fam.toLowerCase().includes(q) ||
+        p.eng.toLowerCase().includes(q) ||
+        (p.bank === WAGAKKI_BANK && (WAGAKKI_FAMILY.includes(q) || "wagakki".includes(q)))
       );
     });
 
     this.elInstrumentCount.textContent = `${filtered.length} 件`;
     this.elInstrumentList.innerHTML = "";
 
-    for (const [prog, en, ja, fam, eng] of filtered) {
+    for (const p of filtered) {
+      const isSelected = p.bank === this.selectedBank && p.prog === this.selectedProgram;
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.className = `instrument-card${prog === this.selectedProgram ? " selected" : ""}`;
+      btn.className = `instrument-card${isSelected ? " selected" : ""}`;
       btn.setAttribute("role", "option");
-      btn.setAttribute("aria-selected", prog === this.selectedProgram ? "true" : "false");
-      btn.dataset.program = String(prog);
+      btn.setAttribute("aria-selected", isSelected ? "true" : "false");
+      btn.dataset.program = String(p.prog);
+      btn.dataset.bank = String(p.bank);
 
       const main = document.createElement("div");
       main.className = "inst-main";
@@ -639,17 +763,17 @@ class SoundHallStudioApp {
 
       const progSpan = document.createElement("span");
       progSpan.className = "inst-prog";
-      progSpan.textContent = `#${String(prog).padStart(3, "0")}`;
+      progSpan.textContent = presetLabel(p);
 
       const jaSpan = document.createElement("span");
       jaSpan.className = "inst-name-ja";
-      jaSpan.textContent = ja;
+      jaSpan.textContent = p.ja;
 
       titleRow.append(progSpan, jaSpan);
 
       const enSpan = document.createElement("span");
       enSpan.className = "inst-name-en";
-      enSpan.textContent = en;
+      enSpan.textContent = p.en;
 
       main.append(titleRow, enSpan);
 
@@ -658,48 +782,56 @@ class SoundHallStudioApp {
 
       const engSpan = document.createElement("span");
       engSpan.className = "badge-engine";
-      engSpan.textContent = eng;
+      engSpan.textContent = p.eng;
 
       const famSpan = document.createElement("span");
       famSpan.className = "badge-family";
-      famSpan.textContent = fam;
+      famSpan.textContent = p.bank === WAGAKKI_BANK ? `${WAGAKKI_FAMILY} · ${p.fam}` : p.fam;
 
       badges.append(engSpan, famSpan);
       btn.append(main, badges);
 
       btn.addEventListener("click", async () => {
-        await this.selectInstrument(prog, this.chkAutoAudition.checked);
+        await this.selectInstrument(p.prog, this.chkAutoAudition.checked, p.bank);
       });
 
       this.elInstrumentList.appendChild(btn);
     }
   }
 
-  async selectInstrument(program, audition = false) {
-    this.selectedProgram = program & 0x7f;
-    const [prog, en, ja, , eng, defRev, defCho] = GM_PRESETS[this.selectedProgram];
+  /** Sends Bank Select + Program Change for the selected instrument on channel 1. */
+  applySelectedPreset() {
+    if (this.synth) {
+      this.synth.bankProgramChange(0, this.selectedBank, this.selectedProgram);
+    }
+  }
 
-    this.elStatusPatch.textContent = `#${String(prog).padStart(3, "0")} ${en} (${ja})`;
-    this.elReadoutEngineKind.textContent = `${eng} Engine`;
+  selectedPreset() {
+    return findPreset(this.selectedBank, this.selectedProgram);
+  }
+
+  async selectInstrument(program, audition = false, bank = 0) {
+    const preset = findPreset(bank, program & 0x7f);
+    this.selectedBank = preset.bank;
+    this.selectedProgram = preset.prog;
+
+    this.elStatusPatch.textContent = `${presetLabel(preset)} ${preset.en} (${preset.ja})`;
+    this.elReadoutEngineKind.textContent = `${preset.eng} Engine`;
 
     for (const card of this.elInstrumentList.children) {
-      const isMatch = Number(card.dataset.program) === this.selectedProgram;
+      const isMatch =
+        Number(card.dataset.program) === this.selectedProgram &&
+        Number(card.dataset.bank) === this.selectedBank;
       card.classList.toggle("selected", isMatch);
       card.setAttribute("aria-selected", isMatch ? "true" : "false");
     }
 
-    if (this.synth) {
-      this.synth.programChange(0, this.selectedProgram);
-    }
+    this.applySelectedPreset();
 
     if (audition) {
       await this.ensureAudioStarted();
-      this.synth.programChange(0, this.selectedProgram);
-      this.triggerPreviewNote(60, 0.55);
-    } else {
-      // Gently update default reverb/chorus indicators if audio hasn't overridden
-      void defRev;
-      void defCho;
+      this.applySelectedPreset();
+      this.triggerPreviewNote(preset.preview, 0.55);
     }
   }
 
@@ -721,7 +853,7 @@ class SoundHallStudioApp {
 
       const inst = document.createElement("div");
       inst.className = "ch-inst";
-      inst.textContent = ch === 9 ? "Standard Drum Kit" : GM_PRESETS[0][2];
+      inst.textContent = ch === 9 ? "Standard Drum Kit" : CATALOG[0].ja;
 
       const track = document.createElement("div");
       track.className = "ch-meter-track";
@@ -865,7 +997,7 @@ class SoundHallStudioApp {
   async pressNote(note) {
     await this.ensureAudioStarted();
     this.userHeldNotes.add(note);
-    this.synth.programChange(0, this.selectedProgram);
+    this.applySelectedPreset();
     this.synth.noteOn(0, note, this.keyVelocity);
     this.pianoKeyElements.get(note)?.classList.add("active");
   }
@@ -880,7 +1012,7 @@ class SoundHallStudioApp {
 
   async triggerPreviewNote(note = 60, durationSec = 0.6) {
     await this.ensureAudioStarted();
-    this.synth.programChange(0, this.selectedProgram);
+    this.applySelectedPreset();
     this.synth.noteOn(0, note, this.keyVelocity);
     setTimeout(() => {
       if (this.synth) this.synth.noteOff(0, note);
@@ -889,7 +1021,7 @@ class SoundHallStudioApp {
 
   async triggerPreviewChord() {
     await this.ensureAudioStarted();
-    this.synth.programChange(0, this.selectedProgram);
+    this.applySelectedPreset();
     const notes = [60, 64, 67, 71, 74]; // Cmaj9
     notes.forEach((n, idx) => {
       setTimeout(() => {
@@ -919,7 +1051,9 @@ class SoundHallStudioApp {
       this.updatePlayButtonLabel(false);
     });
 
-    this.elBtnAuditionNote.addEventListener("click", () => this.triggerPreviewNote(60, 0.75));
+    this.elBtnAuditionNote.addEventListener("click", () =>
+      this.triggerPreviewNote(this.selectedPreset()?.preview ?? 60, 0.75),
+    );
     this.elBtnAuditionChord.addEventListener("click", () => this.triggerPreviewChord());
 
     this.elBtnSustain.addEventListener("click", async () => {
@@ -1291,13 +1425,15 @@ class SoundHallStudioApp {
         const entry = this.channelCells[ch];
         const act = this.synth.channelActivity(ch);
         const prog = this.synth.channelProgram(ch);
+        const bank = this.synth.channelBank(ch);
         const lastNote = this.synth.channelLastNote(ch);
 
         entry.fill.style.inlineSize = `${Math.round(act * 100)}%`;
         entry.cell.classList.toggle("active-ch", act > 0.05);
         entry.noteSpan.textContent = act > 0.02 ? midiToNoteName(lastNote) : "-";
         if (ch !== 9) {
-          entry.inst.textContent = `#${String(prog).padStart(3, "0")} ${GM_PRESETS[prog]?.[2] ?? ""}`;
+          const p = findPreset(bank, prog);
+          entry.inst.textContent = p ? `${presetLabel(p)} ${p.ja}` : `#${prog}`;
         }
       }
 

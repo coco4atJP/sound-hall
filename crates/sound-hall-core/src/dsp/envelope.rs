@@ -186,6 +186,59 @@ impl Lfo {
     }
 }
 
+/// Human-like vibrato: delayed onset with fade-in, and slow random drift of rate and depth
+/// (players never vibrate like a metronome). Output in [-1.25, 1.25] before depth scaling.
+#[derive(Clone, Debug)]
+pub struct HumanVibrato {
+    rate_hz: f32,
+    delay_sec: f32,
+    fade_sec: f32,
+    phase: f32,
+    elapsed: f32,
+    drift: f32,
+    drift_target: f32,
+    drift_timer: f32,
+    rng: super::math::Rng,
+}
+
+impl HumanVibrato {
+    pub fn new(rate_hz: f32, delay_sec: f32, fade_sec: f32, seed: u64) -> Self {
+        let mut rng = super::math::Rng::new(seed);
+        let phase = rng.next_f32_unipolar();
+        Self {
+            rate_hz: rate_hz.max(0.0),
+            delay_sec: delay_sec.max(0.0),
+            fade_sec: fade_sec.max(0.001),
+            phase,
+            elapsed: 0.0,
+            drift: 0.0,
+            drift_target: 0.0,
+            drift_timer: 0.0,
+            rng,
+        }
+    }
+
+    #[inline]
+    pub fn next(&mut self, sr: f32) -> f32 {
+        let dt = 1.0 / sr.max(8000.0);
+        self.elapsed += dt;
+        self.drift_timer -= dt;
+        if self.drift_timer <= 0.0 {
+            self.drift_timer = 0.18 + 0.25 * self.rng.next_f32_unipolar();
+            self.drift_target = self.rng.next_f32_bipolar();
+        }
+        self.drift += (self.drift_target - self.drift) * (dt * 4.0).min(1.0);
+        // +-6 % rate wander, +-20 % depth wander
+        let rate = self.rate_hz * (1.0 + 0.06 * self.drift);
+        self.phase = (self.phase + rate * dt).rem_euclid(1.0);
+        if self.elapsed < self.delay_sec {
+            return 0.0;
+        }
+        let fade = ((self.elapsed - self.delay_sec) / self.fade_sec).clamp(0.0, 1.0);
+        (self.phase * TAU).sin() * fade * (1.0 + 0.2 * self.drift)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

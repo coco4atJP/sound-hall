@@ -58,6 +58,12 @@ export class SoundHallWasm {
     this.exports.sh_control_change(this.ptr, channel & 0x0f, cc & 0x7f, value & 0x7f);
   }
 
+  /** Bank Select (CC 0) + Program Change: bank 0 = General MIDI, bank 1 = 和楽器. */
+  bankProgramChange(channel, bank, program) {
+    this.controlChange(channel, 0, bank);
+    this.programChange(channel, program);
+  }
+
   pitchBend(channel, value14Bit = 8192) {
     if (!this.ptr) return;
     this.exports.sh_pitch_bend(this.ptr, channel & 0x0f, value14Bit & 0x3fff);
@@ -189,6 +195,11 @@ export class SoundHallWasm {
   channelProgram(ch) {
     if (!this.ptr) return 0;
     return this.exports.sh_channel_program(this.ptr, ch & 0x0f);
+  }
+
+  channelBank(ch) {
+    if (!this.ptr || !this.exports.sh_channel_bank) return 0;
+    return this.exports.sh_channel_bank(this.ptr, ch & 0x0f);
   }
 
   channelActivity(ch) {
